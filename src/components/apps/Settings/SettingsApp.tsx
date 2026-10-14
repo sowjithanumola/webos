@@ -455,7 +455,7 @@ export const SettingsApp: React.FC = () => {
                     <div>
                       <div className="font-medium text-slate-300">Migrate Local Files to Cloud</div>
                       <div className="text-[11px] text-slate-500">
-                        Uploads all current local documents and code to your Supabase account.
+                        Uploads all current local documents and code to your cloud storage account.
                       </div>
                     </div>
                     <button
@@ -463,7 +463,7 @@ export const SettingsApp: React.FC = () => {
                         setMigrating(true);
                         const count = await migrateGuestFilesToCloud();
                         setMigrating(false);
-                        addNotification('Migration Complete', `Synced ${count} files to your Supabase account.`, 'success');
+                        addNotification('Migration Complete', `Synced ${count} files to your cloud account.`, 'success');
                       }}
                       disabled={migrating}
                       className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium transition-colors"
@@ -479,10 +479,10 @@ export const SettingsApp: React.FC = () => {
                     <span>Operating in Local Guest Mode</span>
                   </div>
                   <p className="text-slate-400 text-xs leading-relaxed">
-                    You are currently using isolated browser local storage. Sign in on the WebOS boot screen to link your files to your Supabase cloud account.
+                    You are currently using isolated browser local storage. Sign in on the WebOS boot screen to link your files to your cloud account.
                   </p>
                   <div className="text-[11px] text-slate-500 font-mono">
-                    Supabase Target: https://pefojvlsqnbdikxismgf.supabase.co
+                    Cloud Storage Target: https://pefojvlsqnbdikxismgf.supabase.co
                   </div>
                 </div>
               )}

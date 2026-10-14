@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" />
+      <stop offset="50%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#4F46E5" />
+    </linearGradient>
+
+    <!-- Subtle Top Sheen -->
+    <linearGradient id="sheenGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- W Letter Gradient -->
+    <linearGradient id="wGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#E0E7FF" />
+    </linearGradient>
+
+    <!-- Window Dots Gradient -->
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#818CF8" />
+    </linearGradient>
+
+    <filter id="dropShadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#1E1B4B" flood-opacity="0.5" />
+    </filter>
+
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Squircle Base -->
+  <rect x="24" y="24" width="464" height="464" rx="112" ry="112" fill="url(#bgGrad)" filter="url(#dropShadow)" />
+
+  <!-- Inner Top Sheen Arc -->
+  <rect x="28" y="28" width="456" height="230" rx="108" ry="108" fill="url(#sheenGrad)" />
+
+  <!-- Subtle WebOS Window Header dots (macOS/WebOS style accent) -->
+  <circle cx="100" cy="90" r="14" fill="#F87171" opacity="0.9" />
+  <circle cx="138" cy="90" r="14" fill="#FBBF24" opacity="0.9" />
+  <circle cx="176" cy="90" r="14" fill="#34D399" opacity="0.9" />
+
+  <!-- Grid lines representing desktop windowing OS -->
+  <rect x="360" y="80" width="56" height="20" rx="10" fill="#FFFFFF" opacity="0.2" />
+
+  <!-- Stylized Geometric Modern "W" -->
+  <path d="M120 180 
+           L175 365 
+           C178 375, 188 382, 198 382 
+           C208 382, 218 375, 221 365 
+           L256 250 
+           L291 365 
+           C294 375, 304 382, 314 382 
+           C324 382, 334 375, 337 365 
+           L392 180 
+           C395 170, 388 160, 376 160 
+           L348 160 
+           C340 160, 332 165, 329 173 
+           L288 310 
+           L266 230 
+           C263 220, 253 214, 243 214 
+           L239 214 
+           C229 214, 219 220, 216 230 
+           L194 310 
+           L153 173 
+           C150 165, 142 160, 134 160 
+           L106 160 
+           C94 160, 87 170, 90 180 Z" 
+        fill="url(#wGrad)" 
+        filter="url(#softGlow)" />
+
+  <!-- Small Glowing Pulse Pill at bottom -->
+  <rect x="220" y="420" width="72" height="10" rx="5" fill="#FFFFFF" opacity="0.75" />
+</svg>

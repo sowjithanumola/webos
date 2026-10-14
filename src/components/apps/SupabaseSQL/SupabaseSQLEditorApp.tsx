@@ -110,7 +110,7 @@ const DEFAULT_TABLES: Record<string, TableDefinition> = {
       { name: 'inserted_at', type: 'timestamptz', defaultValue: 'now()' },
     ],
     rows: [
-      { id: '11111111-0000-0000-0000-000000000001', user_id: '4b6f1201-382a-44d5-9128-4402a7b20022', task: 'Implement Supabase SQL Studio UI', is_complete: true, priority: 'high', inserted_at: '2026-10-14T06:00:00Z' },
+      { id: '11111111-0000-0000-0000-000000000001', user_id: '4b6f1201-382a-44d5-9128-4402a7b20022', task: 'Implement Cloud SQL Studio UI', is_complete: true, priority: 'high', inserted_at: '2026-10-14T06:00:00Z' },
       { id: '11111111-0000-0000-0000-000000000002', user_id: '4b6f1201-382a-44d5-9128-4402a7b20022', task: 'Audit RLS security policies for tables', is_complete: true, priority: 'high', inserted_at: '2026-10-14T06:15:00Z' },
       { id: '11111111-0000-0000-0000-000000000003', user_id: '8a5c3e10-951b-4ef9-8134-2908f9c10011', task: 'Configure real-time change data capture', is_complete: false, priority: 'medium', inserted_at: '2026-10-14T06:30:00Z' },
       { id: '11111111-0000-0000-0000-000000000004', user_id: '7c8d9e23-671c-43a1-b849-5511c9d30033', task: 'Benchmark JSONB indexing performance', is_complete: false, priority: 'low', inserted_at: '2026-10-14T06:45:00Z' },
@@ -131,14 +131,14 @@ const DEFAULT_TABLES: Record<string, TableDefinition> = {
     ],
     rows: [
       { id: '22222222-0000-0000-0000-000000000001', title: 'System Architecture v2', author_id: '4b6f1201-382a-44d5-9128-4402a7b20022', category: 'engineering', views: 142, updated_at: '2026-10-14T05:00:00Z' },
-      { id: '22222222-0000-0000-0000-000000000002', title: 'Supabase RLS Best Practices', author_id: '8a5c3e10-951b-4ef9-8134-2908f9c10011', category: 'security', views: 89, updated_at: '2026-10-14T05:30:00Z' },
+      { id: '22222222-0000-0000-0000-000000000002', title: 'PostgreSQL RLS Best Practices', author_id: '8a5c3e10-951b-4ef9-8134-2908f9c10011', category: 'security', views: 89, updated_at: '2026-10-14T05:30:00Z' },
       { id: '22222222-0000-0000-0000-000000000003', title: 'WebOS Windowing Spec', author_id: '7c8d9e23-671c-43a1-b849-5511c9d30033', category: 'design', views: 64, updated_at: '2026-10-14T06:10:00Z' },
     ],
   },
   'auth.users': {
     name: 'users',
     schema: 'auth',
-    description: 'Supabase internal authentication user accounts',
+    description: 'Cloud Auth internal user accounts',
     rlsEnabled: true,
     columns: [
       { name: 'id', type: 'uuid', isPrimary: true, nullable: false },
@@ -347,7 +347,7 @@ ORDER BY priority DESC;`,
 
   // Connection settings
   const [connectionMode, setConnectionMode] = useState<'sandbox' | 'live'>('sandbox');
-  const [supabaseUrl, setSupabaseUrl] = useState<string>('https://xyzcompany.supabase.co');
+  const [supabaseUrl, setSupabaseUrl] = useState<string>('https://pefojvlsqnbdikxismgf.supabase.co');
   const [supabaseKey, setSupabaseKey] = useState<string>('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.sandbox');
 
   // Editor cursor pos
@@ -640,7 +640,7 @@ ORDER BY priority DESC;`,
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `supabase_query_${Date.now()}.csv`;
+    a.download = `query_results_${Date.now()}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -655,7 +655,7 @@ ORDER BY priority DESC;`,
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `supabase_query_${Date.now()}.json`;
+    a.download = `query_results_${Date.now()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

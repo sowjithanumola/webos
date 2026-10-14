@@ -189,7 +189,7 @@ export const TopBar: React.FC = () => {
           <button
             onClick={() => openWindow('settings')}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/10 transition-colors text-[11px]"
-            title={user ? `Supabase Cloud Connected (${user.email})` : 'Local Guest Mode (Click to manage Cloud)'}
+            title={user ? `Cloud Account Connected (${user.email})` : 'Local Guest Mode (Click to manage Cloud)'}
           >
             <Cloud size={13} className={user ? 'text-emerald-400' : 'text-slate-500'} />
             <span className="hidden lg:inline text-slate-400 text-[10px]">

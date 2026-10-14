@@ -116,7 +116,7 @@ export const BootScreen: React.FC = () => {
     setAuthLoading(true);
     const count = await migrateGuestFilesToCloud();
     setAuthLoading(false);
-    addNotification('Cloud Migration', `Migrated ${count} local files to Supabase cloud.`, 'success');
+    addNotification('Cloud Migration', `Migrated ${count} local files to cloud account.`, 'success');
     bootOS();
   };
 
@@ -149,7 +149,7 @@ export const BootScreen: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-semibold text-sm text-slate-100">{user.email}</h3>
-                <span className="text-[11px] text-emerald-400">Connected to Supabase Cloud</span>
+                <span className="text-[11px] text-emerald-400">Connected to Cloud Account</span>
               </div>
             </div>
 
@@ -207,7 +207,7 @@ export const BootScreen: React.FC = () => {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Supabase Cloud
+                Cloud Account
               </button>
             </div>
 
@@ -334,9 +334,9 @@ export const BootScreen: React.FC = () => {
                     {authLoading
                       ? 'Please wait...'
                       : authTab === 'login'
-                      ? 'Sign In with Supabase'
+                      ? 'Sign In to Cloud'
                       : authTab === 'signup'
-                      ? 'Create Supabase Account'
+                      ? 'Create Cloud Account'
                       : 'Send Reset Link'}
                   </span>
                   <ArrowRight size={13} />
@@ -387,7 +387,7 @@ export const BootScreen: React.FC = () => {
 
       {/* Footer Info */}
       <div className="text-[11px] text-slate-500">
-        WebOS v1.1.0 · Supabase Cloud Connected
+        WebOS v1.1.0 · Cloud Sync Active
       </div>
     </div>
   );
