@@ -1,0 +1,8 @@
+{
+  "name": "WebOS - Browser Operating System",
+  "description": "A complete, production-quality browser-based desktop operating system with virtual filesystem, window manager, terminal, text editor, notes, and utilities.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
