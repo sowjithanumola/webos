@@ -62,6 +62,12 @@ const inspectRecoveryFromUrl = (): { isRecovery: boolean; error: string | null }
     } else {
       parsedError = 'This password reset link is invalid or expired. Please request a new link.';
     }
+
+    try {
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch {
+      // ignore
+    }
   }
 
   return {
@@ -192,19 +198,99 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error };
   };
 
-  const verifyRecoveryOtp = async (email: string, token: string) => {
-    const { data, error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: token.trim(),
+  const verifyRecoveryOtp = async (email: string, rawInput: string) => {
+    let cleanToken = rawInput.trim();
+    const cleanEmail = email.trim();
+
+    // If user pasted a full URL (e.g. copied directly from the email link or address bar)
+    if (
+      cleanToken.startsWith('http://') ||
+      cleanToken.startsWith('https://') ||
+      cleanToken.includes('token=') ||
+      cleanToken.includes('access_token=') ||
+      cleanToken.includes('code=')
+    ) {
+      try {
+        const urlStr = cleanToken.includes('://')
+          ? cleanToken
+          : `https://dummy.com/${cleanToken.startsWith('#') || cleanToken.startsWith('?') ? cleanToken : '?' + cleanToken}`;
+        const parsed = new URL(urlStr);
+        const searchP = new URLSearchParams(parsed.search);
+        const hashP = new URLSearchParams(parsed.hash.replace(/^#/, ''));
+
+        // Check for access_token in hash or query
+        const accessToken = hashP.get('access_token') || searchP.get('access_token');
+        const refreshToken = hashP.get('refresh_token') || searchP.get('refresh_token');
+        if (accessToken) {
+          const { data: sessionData, error: sessionErr } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || '',
+          });
+          if (!sessionErr && sessionData.session) {
+            setSession(sessionData.session);
+            setUser(sessionData.user);
+            setIsRecoveryMode(true);
+            setRecoveryError(null);
+            return { error: null };
+          }
+        }
+
+        // Check for token, token_hash, or code
+        const extracted =
+          searchP.get('token') ||
+          hashP.get('token') ||
+          searchP.get('token_hash') ||
+          hashP.get('token_hash') ||
+          searchP.get('code');
+        if (extracted) {
+          cleanToken = extracted;
+        }
+      } catch {
+        // Fall back to raw string
+      }
+    }
+
+    // Method 1: Standard OTP with email (works for 6-digit codes and email tokens)
+    let res = await supabase.auth.verifyOtp({
+      email: cleanEmail,
+      token: cleanToken,
       type: 'recovery',
     });
-    if (!error && data.session) {
-      setSession(data.session);
-      setUser(data.user);
+
+    // Method 2: If failed and token is a long hash (>10 chars), try token_hash directly
+    if (res.error && cleanToken.length > 10) {
+      const hashRes = await supabase.auth.verifyOtp({
+        token_hash: cleanToken,
+        type: 'recovery',
+      });
+      if (!hashRes.error && hashRes.data?.session) {
+        res = hashRes;
+      }
+    }
+
+    // Method 3: If token is a PKCE exchange code (>15 chars)
+    if (res.error && cleanToken.length > 15) {
+      try {
+        const exchangeRes = await supabase.auth.exchangeCodeForSession(cleanToken);
+        if (!exchangeRes.error && exchangeRes.data?.session) {
+          setSession(exchangeRes.data.session);
+          setUser(exchangeRes.data.user);
+          setIsRecoveryMode(true);
+          setRecoveryError(null);
+          return { error: null };
+        }
+      } catch {
+        // Continue with original error
+      }
+    }
+
+    if (!res.error && res.data?.session) {
+      setSession(res.data.session);
+      setUser(res.data.user);
       setIsRecoveryMode(true);
       setRecoveryError(null);
     }
-    return { error };
+    return { error: res.error };
   };
 
   const updatePassword = async (newPassword: string) => {

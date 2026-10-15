@@ -614,9 +614,9 @@ export const BootScreen: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setIsRecoveryMode(true)}
-                          className="text-[11px] text-blue-400 hover:text-blue-300 underline transition-colors cursor-pointer"
+                          className="text-[11px] text-slate-400 hover:text-blue-400 underline transition-colors cursor-pointer"
                         >
-                          Already received an email link or 6-digit code? Click here
+                          Have a 6-digit email code? Enter it here
                         </button>
                       </div>
                     )}

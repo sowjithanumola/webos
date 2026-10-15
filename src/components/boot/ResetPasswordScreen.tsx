@@ -13,6 +13,8 @@ import {
   Hash,
   Send,
   Loader2,
+  X,
+  RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useOS } from '../../context/OSContext';
@@ -26,6 +28,7 @@ export const ResetPasswordScreen: React.FC = () => {
     verifyRecoveryOtp,
     resetPassword,
     recoveryError,
+    setRecoveryError,
     clearRecoveryState,
   } = useAuth();
   const { bootOS, addNotification } = useOS();
@@ -77,7 +80,7 @@ export const ResetPasswordScreen: React.FC = () => {
     setErrorMessage(null);
     setInfoMessage(null);
 
-    // If there is no active recovery session yet (e.g. user manually came with an OTP code)
+    // If there is no active recovery session yet (e.g. user manually came with an OTP code or pasted link)
     if (!hasActiveSession) {
       const cleanEmail = emailInput.trim();
       const cleanToken = tokenInput.trim();
@@ -89,7 +92,7 @@ export const ResetPasswordScreen: React.FC = () => {
       }
       if (!cleanToken) {
         setIsSubmitting(false);
-        setErrorMessage('Please enter the 6-digit code or recovery token from your email.');
+        setErrorMessage('Please enter the 6-digit code or paste the link from your email.');
         return;
       }
 
@@ -97,7 +100,8 @@ export const ResetPasswordScreen: React.FC = () => {
       if (otpError) {
         setIsSubmitting(false);
         setErrorMessage(
-          otpError.message || 'Invalid or expired verification code. Please check your email or request a new link.'
+          otpError.message ||
+            'Unable to verify token. If you requested multiple emails, please make sure you use the newest email or request a fresh link below.'
         );
         return;
       }
@@ -122,17 +126,18 @@ export const ResetPasswordScreen: React.FC = () => {
     }
   };
 
-  const handleResendLink = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleResendLink = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const cleanEmail = emailInput.trim();
     if (!cleanEmail) {
-      setErrorMessage('Please enter your account email address.');
+      setErrorMessage('Please enter your account email address above first.');
       return;
     }
 
     setIsSubmitting(true);
     setErrorMessage(null);
     setInfoMessage(null);
+    if (setRecoveryError) setRecoveryError(null);
 
     const { error } = await resetPassword(cleanEmail);
     setIsSubmitting(false);
@@ -140,7 +145,7 @@ export const ResetPasswordScreen: React.FC = () => {
     if (error) {
       setErrorMessage(error.message || 'Failed to send reset email. Please verify SMTP settings.');
     } else {
-      setInfoMessage('A new password reset link has been dispatched to your email.');
+      setInfoMessage('A fresh password reset link has been dispatched to your email! Please check your inbox.');
     }
   };
 
@@ -181,61 +186,19 @@ export const ResetPasswordScreen: React.FC = () => {
             <KeyRound size={26} />
           </div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-            {isSuccess
-              ? 'Password Reset Complete'
-              : recoveryError
-              ? 'Invalid Recovery Link'
-              : 'Create New Password'}
+            {isSuccess ? 'Password Reset Complete' : 'Create New Password'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 max-w-sm">
             {isSuccess
               ? 'Your password has been changed. You can now access your cloud workspace.'
-              : recoveryError
-              ? 'This link cannot be used to reset your password.'
               : user?.email
               ? `Choose a new secure password for ${user.email}`
-              : 'Enter your new secure password below to complete recovery.'}
+              : 'Choose a new secure password for your cloud account.'}
           </p>
         </div>
 
-        {/* State 1: Expired / Invalid Recovery Link */}
-        {recoveryError && !isSuccess ? (
-          <div className="space-y-4">
-            <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-800/80 text-amber-200 text-xs sm:text-sm space-y-2">
-              <div className="flex items-center gap-2 font-semibold text-amber-300">
-                <AlertCircle size={18} className="shrink-0 text-amber-400" />
-                <span>Recovery Link Expired or Invalid</span>
-              </div>
-              <p className="text-amber-200/90 leading-relaxed text-xs">
-                {recoveryError}
-              </p>
-              <p className="text-slate-400 text-[11px] pt-1">
-                For security, password reset links expire after a short time and can only be clicked once.
-              </p>
-            </div>
-
-            <div className="space-y-2.5 pt-2">
-              <button
-                type="button"
-                onClick={handleReturnToLogin}
-                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 transition-transform active:scale-[0.99] cursor-pointer"
-              >
-                <span>Request a New Reset Link</span>
-                <ArrowRight size={15} />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleReturnToLogin}
-                className="w-full py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 text-slate-300 font-medium text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <RotateCcw size={13} />
-                <span>Back to WebOS Login</span>
-              </button>
-            </div>
-          </div>
-        ) : isSuccess ? (
-          /* State 2: Success State */
+        {/* Success State */}
+        {isSuccess ? (
           <div className="space-y-5 text-center">
             <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/70 text-emerald-200 space-y-2">
               <div className="flex items-center justify-center gap-2 font-semibold text-emerald-300 text-sm">
@@ -267,8 +230,45 @@ export const ResetPasswordScreen: React.FC = () => {
             </div>
           </div>
         ) : (
-          /* State 3: Password Reset Form */
+          /* Password Reset & Recovery Form */
           <div className="space-y-4">
+            {/* Informative Warning if Previous Link was Expired or Invalid */}
+            {recoveryError && (
+              <div className="p-3.5 rounded-2xl bg-amber-950/50 border border-amber-800 text-xs text-amber-200 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 font-semibold text-amber-300">
+                    <AlertCircle size={16} className="shrink-0 text-amber-400" />
+                    <span>Previous Link Expired or Already Used</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRecoveryError(null)}
+                    className="text-amber-400 hover:text-amber-200 p-0.5 rounded cursor-pointer"
+                    title="Dismiss"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <p className="text-[12px] text-amber-200/90 leading-relaxed">
+                  {recoveryError}
+                </p>
+                <div className="pt-1 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleResendLink()}
+                    disabled={isSubmitting || !emailInput.trim()}
+                    className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} className={isSubmitting ? 'animate-spin' : ''} />
+                    <span>Send Me a Fresh Link</span>
+                  </button>
+                  <span className="text-[11px] text-amber-400/80">
+                    (Use latest email in inbox)
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* If user is ALREADY authenticated via recovery link session */}
             {hasActiveSession ? (
               <div className="p-3 rounded-2xl bg-blue-950/40 border border-blue-800/60 flex items-center gap-3">
@@ -283,7 +283,7 @@ export const ResetPasswordScreen: React.FC = () => {
                 </div>
               </div>
             ) : (
-              /* If no session yet, allow switching between 6-digit code or resending link */
+              /* If no session yet, allow switching between code/link paste or resending link */
               <div className="space-y-3">
                 <div className="grid grid-cols-2 p-1 bg-slate-950/80 rounded-xl border border-slate-800 text-xs font-medium">
                   <button
@@ -298,7 +298,7 @@ export const ResetPasswordScreen: React.FC = () => {
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    Enter 6-Digit Code
+                    Enter Code or Paste Link
                   </button>
                   <button
                     type="button"
@@ -341,7 +341,7 @@ export const ResetPasswordScreen: React.FC = () => {
                       className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 transition-transform active:scale-[0.99] cursor-pointer"
                     >
                       <Send size={14} />
-                      <span>{isSubmitting ? 'Sending Link...' : 'Email Me a Reset Link'}</span>
+                      <span>{isSubmitting ? 'Sending Link...' : 'Email Me a Fresh Reset Link'}</span>
                     </button>
                   </form>
                 )}
@@ -351,7 +351,7 @@ export const ResetPasswordScreen: React.FC = () => {
             {/* Password input form (when activeSession or when on 'otp' tab) */}
             {(hasActiveSession || activeTab === 'otp') && (
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Email and Code fields if not logged in yet */}
+                {/* Email and Code / Link paste fields if not logged in yet */}
                 {!hasActiveSession && (
                   <div className="space-y-3 p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800/80">
                     <div className="space-y-1">
@@ -372,20 +372,26 @@ export const ResetPasswordScreen: React.FC = () => {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-300 block">
-                        6-Digit Code / Email Recovery Token
-                      </label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-slate-300 block">
+                          6-Digit Code or Paste Email Link
+                        </label>
+                        <span className="text-[10px] text-slate-400">Accepts URL or code</span>
+                      </div>
                       <div className="relative">
                         <Hash size={15} className="absolute left-3.5 top-3 text-slate-500" />
                         <input
                           type="text"
                           required
-                          placeholder="e.g. 123456 or token"
+                          placeholder="e.g. 123456 or paste the link from your email"
                           value={tokenInput}
                           onChange={(e) => setTokenInput(e.target.value)}
                           className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 font-mono focus:outline-none focus:border-blue-500"
                         />
                       </div>
+                      <p className="text-[11px] text-slate-400 pt-0.5">
+                        Tip: You can right-click the button in your email, click <em>&ldquo;Copy Link Address&rdquo;</em>, and paste it directly above.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -400,7 +406,7 @@ export const ResetPasswordScreen: React.FC = () => {
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
-                      autoFocus
+                      autoFocus={hasActiveSession}
                       placeholder="At least 6 characters"
                       value={newPassword}
                       onChange={(e) => {
@@ -412,7 +418,7 @@ export const ResetPasswordScreen: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
+                      className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors cursor-pointer"
                       title={showPassword ? 'Hide password' : 'Show password'}
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -441,7 +447,7 @@ export const ResetPasswordScreen: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
+                      className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors cursor-pointer"
                       title={showConfirmPassword ? 'Hide password' : 'Show password'}
                     >
                       {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
