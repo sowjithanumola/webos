@@ -31,8 +31,14 @@ export const SettingsApp: React.FC = () => {
     importBackup,
     addNotification,
   } = useOS();
-  const { user, signOut, migrateGuestFilesToCloud, cloudStatus } = useAuth();
+  const { user, signOut, migrateGuestFilesToCloud, cloudStatus, updateProfileName, updatePassword } = useAuth();
   const [migrating, setMigrating] = useState<boolean>(false);
+  const [fullNameInput, setFullNameInput] = useState<string>(user?.user_metadata?.full_name || '');
+  const [updatingName, setUpdatingName] = useState<boolean>(false);
+  const [settingsNewPassword, setSettingsNewPassword] = useState<string>('');
+  const [settingsConfirmPassword, setSettingsConfirmPassword] = useState<string>('');
+  const [updatingPassword, setUpdatingPassword] = useState<boolean>(false);
+  const [showSettingsPassword, setShowSettingsPassword] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<'appearance' | 'dock' | 'system' | 'cloud' | 'backup' | 'about'>('appearance');
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
@@ -449,6 +455,114 @@ export const SettingsApp: React.FC = () => {
                       <LogOut size={13} />
                       <span>Sign Out</span>
                     </button>
+                  </div>
+
+                  {/* Profile Name Management */}
+                  <div className="pt-3 border-t border-slate-800/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-slate-300">
+                        Profile Full Name
+                      </label>
+                      <span className="text-[11px] text-slate-500">
+                        {user.user_metadata?.full_name ? 'Name configured' : 'No name set yet'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={fullNameInput}
+                        onChange={(e) => setFullNameInput(e.target.value)}
+                        placeholder="e.g. Alex Morgan"
+                        className="flex-1 bg-slate-900 border border-slate-750 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!fullNameInput.trim()) return;
+                          setUpdatingName(true);
+                          const { error } = await updateProfileName(fullNameInput.trim());
+                          setUpdatingName(false);
+                          if (error) {
+                            addNotification('Update Failed', error.message, 'error');
+                          } else {
+                            updateSettings({
+                              profile: {
+                                ...settings.profile,
+                                name: fullNameInput.trim(),
+                              },
+                            });
+                            addNotification('Profile Saved', 'Full name updated successfully.', 'success');
+                          }
+                        }}
+                        disabled={updatingName || !fullNameInput.trim()}
+                        className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium text-xs transition-colors shrink-0 cursor-pointer"
+                      >
+                        {updatingName ? 'Saving...' : 'Save Name'}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Your full name is synchronized to your cloud user metadata.
+                    </p>
+                  </div>
+
+                  {/* Change Cloud Password */}
+                  <div className="pt-3 border-t border-slate-800/80 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-slate-300">
+                        Change Cloud Password
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowSettingsPassword(!showSettingsPassword)}
+                        className="text-[11px] text-blue-400 hover:text-blue-300 transition-colors"
+                      >
+                        {showSettingsPassword ? 'Hide password' : 'Show password'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type={showSettingsPassword ? 'text' : 'password'}
+                        value={settingsNewPassword}
+                        onChange={(e) => setSettingsNewPassword(e.target.value)}
+                        placeholder="New Password (min 6 chars)"
+                        className="bg-slate-900 border border-slate-750 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      />
+                      <input
+                        type={showSettingsPassword ? 'text' : 'password'}
+                        value={settingsConfirmPassword}
+                        onChange={(e) => setSettingsConfirmPassword(e.target.value)}
+                        placeholder="Confirm New Password"
+                        className="bg-slate-900 border border-slate-750 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (settingsNewPassword.length < 6) {
+                            addNotification('Password Error', 'Password must be at least 6 characters long.', 'error');
+                            return;
+                          }
+                          if (settingsNewPassword !== settingsConfirmPassword) {
+                            addNotification('Password Error', 'Passwords do not match.', 'error');
+                            return;
+                          }
+                          setUpdatingPassword(true);
+                          const { error } = await updatePassword(settingsNewPassword);
+                          setUpdatingPassword(false);
+                          if (error) {
+                            addNotification('Failed to Update', error.message, 'error');
+                          } else {
+                            setSettingsNewPassword('');
+                            setSettingsConfirmPassword('');
+                            addNotification('Password Updated', 'Your cloud password was successfully changed.', 'success');
+                          }
+                        }}
+                        disabled={updatingPassword || !settingsNewPassword}
+                        className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium text-xs transition-colors cursor-pointer"
+                      >
+                        {updatingPassword ? 'Updating...' : 'Update Password'}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
