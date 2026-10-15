@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Lock,
   Eye,
@@ -11,17 +11,29 @@ import {
   RotateCcw,
   Mail,
   Hash,
+  Send,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useOS } from '../../context/OSContext';
 
 export const ResetPasswordScreen: React.FC = () => {
-  const { user, session, updatePassword, verifyRecoveryOtp, recoveryError, clearRecoveryState } = useAuth();
+  const {
+    user,
+    session,
+    loading,
+    updatePassword,
+    verifyRecoveryOtp,
+    resetPassword,
+    recoveryError,
+    clearRecoveryState,
+  } = useAuth();
   const { bootOS, addNotification } = useOS();
 
-  // If user is already active from recovery session token in URL
+  // If user is already authenticated via recovery session token in URL
   const hasActiveSession = !!user || !!session;
 
+  const [activeTab, setActiveTab] = useState<'otp' | 'resend'>('otp');
   const [emailInput, setEmailInput] = useState<string>(user?.email || '');
   const [tokenInput, setTokenInput] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
@@ -31,12 +43,23 @@ export const ResetPasswordScreen: React.FC = () => {
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
+
+  // Sync email when user session resolves
+  useEffect(() => {
+    if (user?.email) {
+      setEmailInput(user.email);
+    }
+  }, [user]);
 
   // Validation rules
   const hasMinLength = newPassword.length >= 6;
   const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
-  const isFormValid = hasMinLength && passwordsMatch && (hasActiveSession || (emailInput.trim().length > 3 && tokenInput.trim().length >= 4));
+  const isFormValid =
+    hasMinLength &&
+    passwordsMatch &&
+    (hasActiveSession || (emailInput.trim().length > 3 && tokenInput.trim().length >= 4));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,8 +75,9 @@ export const ResetPasswordScreen: React.FC = () => {
 
     setIsSubmitting(true);
     setErrorMessage(null);
+    setInfoMessage(null);
 
-    // If there is no active recovery session yet (e.g. user manually came to this screen with an OTP or token)
+    // If there is no active recovery session yet (e.g. user manually came with an OTP code)
     if (!hasActiveSession) {
       const cleanEmail = emailInput.trim();
       const cleanToken = tokenInput.trim();
@@ -72,7 +96,9 @@ export const ResetPasswordScreen: React.FC = () => {
       const { error: otpError } = await verifyRecoveryOtp(cleanEmail, cleanToken);
       if (otpError) {
         setIsSubmitting(false);
-        setErrorMessage(otpError.message || 'Invalid or expired verification code. Please check your email.');
+        setErrorMessage(
+          otpError.message || 'Invalid or expired verification code. Please check your email or request a new link.'
+        );
         return;
       }
     }
@@ -83,7 +109,8 @@ export const ResetPasswordScreen: React.FC = () => {
 
     if (updateError) {
       setErrorMessage(
-        updateError.message || 'Failed to update password. Your recovery session may have expired. Please request a new link.'
+        updateError.message ||
+          'Failed to update password. Your recovery session may have expired. Please request a new link.'
       );
     } else {
       setIsSuccess(true);
@@ -95,6 +122,28 @@ export const ResetPasswordScreen: React.FC = () => {
     }
   };
 
+  const handleResendLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = emailInput.trim();
+    if (!cleanEmail) {
+      setErrorMessage('Please enter your account email address.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setInfoMessage(null);
+
+    const { error } = await resetPassword(cleanEmail);
+    setIsSubmitting(false);
+
+    if (error) {
+      setErrorMessage(error.message || 'Failed to send reset email. Please verify SMTP settings.');
+    } else {
+      setInfoMessage('A new password reset link has been dispatched to your email.');
+    }
+  };
+
   const handleContinueToDesktop = () => {
     clearRecoveryState();
     bootOS();
@@ -103,6 +152,21 @@ export const ResetPasswordScreen: React.FC = () => {
   const handleReturnToLogin = () => {
     clearRecoveryState();
   };
+
+  // Loading state while Supabase exchanges hash/code
+  if (loading && !hasActiveSession) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950 via-slate-950 to-black text-slate-100 select-none">
+        <div className="flex flex-col items-center gap-3 p-8 rounded-3xl bg-slate-900/95 border border-slate-800 shadow-2xl text-center">
+          <Loader2 size={32} className="text-blue-500 animate-spin" />
+          <h2 className="text-sm font-semibold text-slate-200">Verifying Password Recovery Session</h2>
+          <p className="text-xs text-slate-400 max-w-xs">
+            Connecting to cloud authentication and validating your recovery link...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 sm:p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950 via-slate-950 to-black text-slate-100 select-none overflow-y-auto">
@@ -204,156 +268,244 @@ export const ResetPasswordScreen: React.FC = () => {
           </div>
         ) : (
           /* State 3: Password Reset Form */
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* If there is no active session yet, ask for email and verification code/token */}
-            {!hasActiveSession && (
-              <div className="space-y-3 p-3 rounded-2xl bg-slate-950/60 border border-slate-800/80">
-                <div className="text-[11px] text-slate-400 leading-snug">
-                  Enter your account email and the 6-digit code or token sent to your inbox:
+          <div className="space-y-4">
+            {/* If user is ALREADY authenticated via recovery link session */}
+            {hasActiveSession ? (
+              <div className="p-3 rounded-2xl bg-blue-950/40 border border-blue-800/60 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+                  <ShieldCheck size={18} />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 block">
-                    Account Email
-                  </label>
-                  <div className="relative">
-                    <Mail size={15} className="absolute left-3.5 top-3 text-slate-500" />
-                    <input
-                      type="email"
-                      required
-                      placeholder="user@example.com"
-                      value={emailInput}
-                      onChange={(e) => setEmailInput(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300 block">
-                    6-Digit Code / Email Token
-                  </label>
-                  <div className="relative">
-                    <Hash size={15} className="absolute left-3.5 top-3 text-slate-500" />
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. 123456 or recovery token"
-                      value={tokenInput}
-                      onChange={(e) => setTokenInput(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 font-mono focus:outline-none focus:border-blue-500"
-                    />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] text-blue-300 font-medium">Verified Recovery Session</div>
+                  <div className="text-xs font-semibold text-slate-100 truncate">
+                    {user?.email || session?.user?.email || 'Cloud Account'}
                   </div>
                 </div>
               </div>
-            )}
+            ) : (
+              /* If no session yet, allow switching between 6-digit code or resending link */
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 p-1 bg-slate-950/80 rounded-xl border border-slate-800 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('otp');
+                      setErrorMessage(null);
+                    }}
+                    className={`py-1.5 rounded-lg transition-all ${
+                      activeTab === 'otp'
+                        ? 'bg-blue-600 text-white font-semibold shadow'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Enter 6-Digit Code
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('resend');
+                      setErrorMessage(null);
+                    }}
+                    className={`py-1.5 rounded-lg transition-all ${
+                      activeTab === 'resend'
+                        ? 'bg-blue-600 text-white font-semibold shadow'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Resend Reset Link
+                  </button>
+                </div>
 
-            {/* New Password */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 block">
-                New Password
-              </label>
-              <div className="relative">
-                <Lock size={15} className="absolute left-3.5 top-3.5 text-slate-500" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  autoFocus
-                  placeholder="At least 6 characters"
-                  value={newPassword}
-                  onChange={(e) => {
-                    setNewPassword(e.target.value);
-                    if (errorMessage) setErrorMessage(null);
-                  }}
-                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition-colors select-text"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
-                  title={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
+                {activeTab === 'resend' && (
+                  <form onSubmit={handleResendLink} className="space-y-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-300 block">
+                        Account Email Address
+                      </label>
+                      <div className="relative">
+                        <Mail size={15} className="absolute left-3.5 top-3 text-slate-500" />
+                        <input
+                          type="email"
+                          required
+                          placeholder="user@example.com"
+                          value={emailInput}
+                          onChange={(e) => setEmailInput(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
 
-            {/* Confirm New Password */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 block">
-                Confirm New Password
-              </label>
-              <div className="relative">
-                <Lock size={15} className="absolute left-3.5 top-3.5 text-slate-500" />
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  required
-                  placeholder="Re-enter your new password"
-                  value={confirmPassword}
-                  onChange={(e) => {
-                    setConfirmPassword(e.target.value);
-                    if (errorMessage) setErrorMessage(null);
-                  }}
-                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition-colors select-text"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
-                  title={showConfirmPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-
-            {/* Password Validation Requirements */}
-            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5 text-[11px]">
-              <div
-                className={`flex items-center gap-1.5 transition-colors ${
-                  hasMinLength ? 'text-emerald-400 font-medium' : 'text-slate-400'
-                }`}
-              >
-                <CheckCircle2 size={13} className={hasMinLength ? 'text-emerald-400' : 'text-slate-600'} />
-                <span>At least 6 characters long</span>
-              </div>
-              <div
-                className={`flex items-center gap-1.5 transition-colors ${
-                  passwordsMatch ? 'text-emerald-400 font-medium' : 'text-slate-400'
-                }`}
-              >
-                <CheckCircle2 size={13} className={passwordsMatch ? 'text-emerald-400' : 'text-slate-600'} />
-                <span>Passwords match</span>
-              </div>
-            </div>
-
-            {/* Error Message */}
-            {errorMessage && (
-              <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-800 text-xs text-rose-300 flex items-start gap-2">
-                <AlertCircle size={15} className="shrink-0 mt-0.5 text-rose-400" />
-                <span>{errorMessage}</span>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || !emailInput.trim()}
+                      className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 transition-transform active:scale-[0.99] cursor-pointer"
+                    >
+                      <Send size={14} />
+                      <span>{isSubmitting ? 'Sending Link...' : 'Email Me a Reset Link'}</span>
+                    </button>
+                  </form>
+                )}
               </div>
             )}
 
-            {/* Action Buttons */}
-            <div className="pt-2 space-y-2.5">
-              <button
-                type="submit"
-                disabled={isSubmitting || !isFormValid}
-                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.99] cursor-pointer"
-              >
-                <span>{isSubmitting ? 'Saving New Password...' : 'Save New Password'}</span>
-                <ArrowRight size={15} />
-              </button>
+            {/* Password input form (when activeSession or when on 'otp' tab) */}
+            {(hasActiveSession || activeTab === 'otp') && (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Email and Code fields if not logged in yet */}
+                {!hasActiveSession && (
+                  <div className="space-y-3 p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800/80">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-300 block">
+                        Account Email
+                      </label>
+                      <div className="relative">
+                        <Mail size={15} className="absolute left-3.5 top-3 text-slate-500" />
+                        <input
+                          type="email"
+                          required
+                          placeholder="user@example.com"
+                          value={emailInput}
+                          onChange={(e) => setEmailInput(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
 
-              <button
-                type="button"
-                onClick={handleReturnToLogin}
-                className="w-full py-2 text-slate-400 hover:text-slate-200 text-xs transition-colors text-center cursor-pointer"
-              >
-                Cancel and return to login
-              </button>
-            </div>
-          </form>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-300 block">
+                        6-Digit Code / Email Recovery Token
+                      </label>
+                      <div className="relative">
+                        <Hash size={15} className="absolute left-3.5 top-3 text-slate-500" />
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. 123456 or token"
+                          value={tokenInput}
+                          onChange={(e) => setTokenInput(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-3 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 font-mono focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* New Password */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-300 block">
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <Lock size={15} className="absolute left-3.5 top-3.5 text-slate-500" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      autoFocus
+                      placeholder="At least 6 characters"
+                      value={newPassword}
+                      onChange={(e) => {
+                        setNewPassword(e.target.value);
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                      className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition-colors select-text"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm New Password */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-300 block">
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <Lock size={15} className="absolute left-3.5 top-3.5 text-slate-500" />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      placeholder="Re-enter your new password"
+                      value={confirmPassword}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                      className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition-colors select-text"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
+                      title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Password Validation Requirements */}
+                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5 text-[11px]">
+                  <div
+                    className={`flex items-center gap-1.5 transition-colors ${
+                      hasMinLength ? 'text-emerald-400 font-medium' : 'text-slate-400'
+                    }`}
+                  >
+                    <CheckCircle2 size={13} className={hasMinLength ? 'text-emerald-400' : 'text-slate-600'} />
+                    <span>At least 6 characters long</span>
+                  </div>
+                  <div
+                    className={`flex items-center gap-1.5 transition-colors ${
+                      passwordsMatch ? 'text-emerald-400 font-medium' : 'text-slate-400'
+                    }`}
+                  >
+                    <CheckCircle2 size={13} className={passwordsMatch ? 'text-emerald-400' : 'text-slate-600'} />
+                    <span>Passwords match</span>
+                  </div>
+                </div>
+
+                {/* Feedback Messages */}
+                {errorMessage && (
+                  <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-800 text-xs text-rose-300 flex items-start gap-2">
+                    <AlertCircle size={15} className="shrink-0 mt-0.5 text-rose-400" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+
+                {infoMessage && (
+                  <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-800 text-xs text-emerald-300 flex items-start gap-2">
+                    <CheckCircle2 size={15} className="shrink-0 mt-0.5 text-emerald-400" />
+                    <span>{infoMessage}</span>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="pt-2 space-y-2.5">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !isFormValid}
+                    className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.99] cursor-pointer"
+                  >
+                    <span>{isSubmitting ? 'Saving New Password...' : 'Save New Password'}</span>
+                    <ArrowRight size={15} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleReturnToLogin}
+                    className="w-full py-2 text-slate-400 hover:text-slate-200 text-xs transition-colors text-center cursor-pointer"
+                  >
+                    Cancel and return to login
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         )}
 
         {/* Security badge footer */}

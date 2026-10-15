@@ -42,12 +42,16 @@ const inspectRecoveryFromUrl = (): { isRecovery: boolean; error: string | null }
   const errorCode = hashParams.get('error_code') || searchParams.get('error_code');
   const type = hashParams.get('type') || searchParams.get('type');
 
-  const isResetRoute = pathname === '/reset-password' || pathname.endsWith('/reset-password');
+  const isResetRoute = pathname === '/reset-password' || pathname.endsWith('/reset-password') || pathname.includes('reset-password');
+  const code = searchParams.get('code') || hashParams.get('code');
+  const token = searchParams.get('token') || hashParams.get('token');
   const isRecoveryType =
     type === 'recovery' ||
     hash.includes('type=recovery') ||
     search.includes('type=recovery') ||
-    hash.includes('access_token=');
+    hash.includes('access_token=') ||
+    !!code ||
+    !!token;
 
   let parsedError: string | null = null;
   if (errorDesc || errorCode) {

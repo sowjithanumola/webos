@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
+  KeyRound,
 } from 'lucide-react';
 import { useOS } from '../../context/OSContext';
 import { useAuth } from '../../context/AuthContext';
@@ -529,9 +530,25 @@ export const BootScreen: React.FC = () => {
                   )}
 
                   {authSuccess && (
-                    <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-800 text-xs text-emerald-300 flex items-start gap-2">
-                      <CheckCircle2 size={15} className="shrink-0 mt-0.5 text-emerald-400" />
-                      <span>{authSuccess}</span>
+                    <div className="p-3.5 rounded-2xl bg-emerald-950/70 border border-emerald-800 text-xs text-emerald-200 space-y-2.5">
+                      <div className="flex items-start gap-2">
+                        <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-400" />
+                        <span className="font-semibold text-emerald-300">{authSuccess}</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-black/40 border border-emerald-900/60 text-[11px] text-slate-300 space-y-1.5">
+                        <div className="font-medium text-emerald-300">How to set your new password:</div>
+                        <p>1. Open your inbox and look for the <strong>Reset Password</strong> email.</p>
+                        <p>2. Click the <strong>Reset Password link</strong> inside the email.</p>
+                        <p>3. WebOS will automatically launch the <strong>Create New Password</strong> form.</p>
+                        <button
+                          type="button"
+                          onClick={() => setIsRecoveryMode(true)}
+                          className="mt-2 w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow transition-colors cursor-pointer"
+                        >
+                          <KeyRound size={13} />
+                          <span>Enter Reset Code or Set Password Now</span>
+                        </button>
+                      </div>
                     </div>
                   )}
 
