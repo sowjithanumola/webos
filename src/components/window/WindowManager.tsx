@@ -13,7 +13,6 @@ import { ImageViewerApp } from '../apps/Utilities/ImageViewerApp';
 import { MediaPlayerApp } from '../apps/Utilities/MediaPlayerApp';
 import { CodeStudioApp } from '../apps/CodeStudio/CodeStudioApp';
 import { DocsStudioApp } from '../apps/DocsStudio/DocsStudioApp';
-import { SupabaseSQLEditorApp } from '../apps/SupabaseSQL/SupabaseSQLEditorApp';
 
 export const WindowManager: React.FC = () => {
   const { windows } = useOS();
@@ -34,9 +33,6 @@ export const WindowManager: React.FC = () => {
         return <CodeStudioApp payload={win.payload as { fileId?: string; filePath?: string }} />;
       case 'docs-studio':
         return <DocsStudioApp payload={win.payload as { fileId?: string; filePath?: string }} />;
-      case 'supabase-sql':
-      case 'sql-studio':
-        return <SupabaseSQLEditorApp />;
       case 'settings':
         return <SettingsApp />;
       case 'clock':

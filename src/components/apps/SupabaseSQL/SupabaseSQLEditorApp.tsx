@@ -347,8 +347,8 @@ ORDER BY priority DESC;`,
 
   // Connection settings
   const [connectionMode, setConnectionMode] = useState<'sandbox' | 'live'>('sandbox');
-  const [supabaseUrl, setSupabaseUrl] = useState<string>('https://pefojvlsqnbdikxismgf.supabase.co');
-  const [supabaseKey, setSupabaseKey] = useState<string>('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.sandbox');
+  const [supabaseUrl, setSupabaseUrl] = useState<string>('https://jhgflaywnboxrpkmzjxk.supabase.co');
+  const [supabaseKey, setSupabaseKey] = useState<string>('sb_publishable_9Fi7FXHsI0amaTvnsMJ_Hw_GQQH2J24');
 
   // Editor cursor pos
   const [cursorPos, setCursorPos] = useState<{ line: number; col: number }>({ line: 1, col: 1 });

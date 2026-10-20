@@ -11,7 +11,6 @@ const OSContent: React.FC = () => {
   const { isBooted, isLocked, isShutDown, bootOS } = useOS();
   const { isRecoveryMode } = useAuth();
 
-  // If Supabase password recovery mode is active or user arrived via /reset-password
   if (isRecoveryMode) {
     return <ResetPasswordScreen />;
   }

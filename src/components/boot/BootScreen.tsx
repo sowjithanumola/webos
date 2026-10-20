@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowRight,
-  Sparkles,
   User as UserIcon,
   ShieldCheck,
-  Cloud,
   Lock,
   Mail,
   Eye,
@@ -13,7 +11,9 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
-  KeyRound,
+  MailCheck,
+  Send,
+  Sparkles,
 } from 'lucide-react';
 import { useOS } from '../../context/OSContext';
 import { useAuth } from '../../context/AuthContext';
@@ -26,12 +26,12 @@ export const BootScreen: React.FC = () => {
     signUp,
     signOut,
     resetPassword,
-    setIsRecoveryMode,
+    resendConfirmationEmail,
     continueAsGuest,
     migrateGuestFilesToCloud,
   } = useAuth();
 
-  const [authTab, setAuthTab] = useState<'guest' | 'login' | 'signup' | 'reset'>('guest');
+  const [authTab, setAuthTab] = useState<'guest' | 'login' | 'signup' | 'reset' | 'confirm-email' | 'reset-sent'>('guest');
 
   // Guest profile state
   const [profileName, setProfileName] = useState<string>(settings.profile.name || 'Administrator');
@@ -44,6 +44,10 @@ export const BootScreen: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
+
+  // Email confirmation state
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState<string>('');
+  const [resendStatus, setResendStatus] = useState<string | null>(null);
 
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -73,7 +77,6 @@ export const BootScreen: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Sync profile name from logged-in user metadata
   useEffect(() => {
     if (user) {
       const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'User';
@@ -113,7 +116,15 @@ export const BootScreen: React.FC = () => {
     setAuthLoading(false);
 
     if (error) {
-      setAuthError(error.message);
+      if (
+        error.message?.toLowerCase().includes('email not confirmed') ||
+        (error as any)?.code === 'email_not_confirmed'
+      ) {
+        setPendingConfirmationEmail(email.trim());
+        setAuthError('Email not confirmed yet. Please verify your email via the link sent to your inbox.');
+      } else {
+        setAuthError(error.message);
+      }
     } else {
       setAuthSuccess('Signed in successfully! Loading desktop...');
       setTimeout(() => {
@@ -148,11 +159,16 @@ export const BootScreen: React.FC = () => {
     setAuthError(null);
     setAuthSuccess(null);
 
-    const { error, user: newUser } = await signUp(cleanEmail, password, cleanName);
+    const { error, needsEmailConfirmation } = await signUp(cleanEmail, password, cleanName);
     setAuthLoading(false);
 
     if (error) {
       setAuthError(error.message);
+    } else if (needsEmailConfirmation) {
+      // Transition to the confirmation screen!
+      setPendingConfirmationEmail(cleanEmail);
+      setAuthTab('confirm-email');
+      addNotification('Confirmation Required', `Verification email sent to ${cleanEmail}`, 'info');
     } else {
       updateSettings({
         profile: {
@@ -183,23 +199,23 @@ export const BootScreen: React.FC = () => {
     setAuthLoading(false);
 
     if (error) {
-      const msg = error.message || '';
-      if (
-        msg.includes('535') ||
-        msg.includes('BadCredentials') ||
-        msg.includes('Username and Password not accepted') ||
-        (error as any).status === 500
-      ) {
-        setAuthError(
-          'Email service error: Cloud SMTP authentication failed (Google 535 BadCredentials). Google requires a 16-character Google App Password (not your Gmail account password) in Supabase Dashboard SMTP settings, or disable Custom SMTP to use default email.'
-        );
-      } else {
-        setAuthError(error.message);
-      }
+      setAuthError(error.message);
     } else {
-      setAuthSuccess(
-        'Password reset link has been sent to your email. Click the recovery link in the email to set a new password.'
-      );
+      setPendingConfirmationEmail(cleanEmail);
+      setAuthTab('reset-sent');
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!pendingConfirmationEmail) return;
+    setAuthLoading(true);
+    setResendStatus(null);
+    const { error } = await resendConfirmationEmail(pendingConfirmationEmail);
+    setAuthLoading(false);
+    if (error) {
+      setResendStatus(`Failed to resend: ${error.message}`);
+    } else {
+      setResendStatus('A fresh confirmation link has been sent to your inbox!');
     }
   };
 
@@ -211,10 +227,11 @@ export const BootScreen: React.FC = () => {
     bootOS();
   };
 
-  const switchTab = (tab: 'guest' | 'login' | 'signup' | 'reset') => {
+  const switchTab = (tab: typeof authTab) => {
     setAuthTab(tab);
     setAuthError(null);
     setAuthSuccess(null);
+    setResendStatus(null);
   };
 
   return (
@@ -235,9 +252,8 @@ export const BootScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Authentication & Profile Box - Increased size & responsive spacing */}
+      {/* Main Authentication & Profile Box */}
       <div className="w-full max-w-md sm:max-w-lg lg:max-w-xl rounded-3xl bg-slate-900/95 backdrop-blur-2xl border border-slate-800/90 p-6 sm:p-8 shadow-2xl shadow-black/80 space-y-5 my-4 max-h-[88vh] overflow-y-auto">
-        {/* If already authenticated with Supabase */}
         {user ? (
           <div className="space-y-5 text-center">
             <div className="flex flex-col items-center gap-2.5">
@@ -286,12 +302,12 @@ export const BootScreen: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* Mode Selector Tabs */}
+            {/* Top Switcher (Guest vs Cloud) */}
             <div className="grid grid-cols-2 gap-1.5 bg-slate-950/80 p-1.5 rounded-2xl border border-slate-800 text-xs sm:text-sm">
               <button
                 type="button"
                 onClick={() => switchTab('guest')}
-                className={`py-2 rounded-xl font-medium transition-colors ${
+                className={`py-2 rounded-xl font-medium transition-colors cursor-pointer ${
                   authTab === 'guest'
                     ? 'bg-slate-800 text-slate-100 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
@@ -302,7 +318,7 @@ export const BootScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={() => switchTab('login')}
-                className={`py-2 rounded-xl font-medium transition-colors ${
+                className={`py-2 rounded-xl font-medium transition-colors cursor-pointer ${
                   authTab !== 'guest'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
@@ -312,7 +328,7 @@ export const BootScreen: React.FC = () => {
               </button>
             </div>
 
-            {/* Guest Profile Mode */}
+            {/* Mode 1: Local Guest */}
             {authTab === 'guest' ? (
               <div className="space-y-4 pt-1">
                 <div className="flex items-center gap-3.5">
@@ -336,7 +352,6 @@ export const BootScreen: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Color Palette */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-300 block">
                     Avatar Theme Color
@@ -374,10 +389,128 @@ export const BootScreen: React.FC = () => {
                   <span>Isolated offline browser storage</span>
                 </div>
               </div>
+            ) : authTab === 'confirm-email' ? (
+              /* Mode 2: Confirm Email Prompt after Sign Up */
+              <div className="space-y-5 pt-1 text-center">
+                <div className="w-16 h-16 mx-auto rounded-3xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shadow-xl shadow-blue-500/10">
+                  <MailCheck size={32} />
+                </div>
+
+                <div className="space-y-1.5">
+                  <h2 className="text-lg font-bold text-slate-100">Confirm Your Email Address</h2>
+                  <p className="text-xs sm:text-sm text-slate-400">
+                    We've sent a verification link to:
+                  </p>
+                  <div className="inline-block px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-blue-300 font-medium">
+                    {pendingConfirmationEmail || email}
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-left text-xs text-slate-300 space-y-2.5">
+                  <div className="font-semibold text-slate-200 flex items-center gap-2">
+                    <Sparkles size={14} className="text-blue-400" />
+                    <span>Next steps to activate your cloud account:</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-400 text-[12px] leading-relaxed">
+                    <li>Open your email inbox (and check your <strong>Spam</strong> or <strong>Promotions</strong> folder).</li>
+                    <li>Click the <strong>Confirm your mail</strong> link inside the email.</li>
+                    <li>Once confirmed, click the button below to sign in!</li>
+                  </ol>
+                </div>
+
+                {resendStatus && (
+                  <div className={`p-3 rounded-xl border text-xs text-left ${
+                    resendStatus.includes('Failed')
+                      ? 'bg-rose-950/70 border-rose-800 text-rose-200'
+                      : 'bg-emerald-950/70 border-emerald-800 text-emerald-200'
+                  }`}>
+                    {resendStatus}
+                  </div>
+                )}
+
+                <div className="space-y-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail(pendingConfirmationEmail || email);
+                      switchTab('login');
+                    }}
+                    className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.99] cursor-pointer"
+                  >
+                    <span>I've Confirmed, Go to Sign In</span>
+                    <ArrowRight size={16} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResendConfirmation}
+                    disabled={authLoading}
+                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs sm:text-sm font-medium transition-colors cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Send size={14} />
+                    <span>{authLoading ? 'Resending Link...' : 'Resend Confirmation Email'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleStartGuest}
+                    className="w-full py-2 text-slate-400 hover:text-slate-200 text-xs transition-colors cursor-pointer"
+                  >
+                    Explore as Local Guest for now
+                  </button>
+                </div>
+              </div>
+            ) : authTab === 'reset-sent' ? (
+              /* Mode 3: Forgot Password Link Sent Screen */
+              <div className="space-y-5 pt-1 text-center">
+                <div className="w-16 h-16 mx-auto rounded-3xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-500/10">
+                  <CheckCircle2 size={32} />
+                </div>
+
+                <div className="space-y-1.5">
+                  <h2 className="text-lg font-bold text-slate-100">Password Reset Link Sent</h2>
+                  <p className="text-xs sm:text-sm text-slate-400">
+                    We sent a secure recovery link to:
+                  </p>
+                  <div className="inline-block px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-300 font-medium">
+                    {pendingConfirmationEmail || email}
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-left text-xs text-slate-300 space-y-2.5">
+                  <div className="font-semibold text-slate-200">How to reset your password:</div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-400 text-[12px] leading-relaxed">
+                    <li>Check your inbox for an email titled <strong>"Reset Password"</strong>.</li>
+                    <li>Click the <strong>"Reset Password"</strong> link inside the email.</li>
+                    <li>WebOS will automatically open the password reset screen with your session verified.</li>
+                  </ol>
+                  <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-800/40 text-[11px] text-emerald-300">
+                    💡 <strong>No code required:</strong> Simply click the link in your email to choose your new password.
+                  </div>
+                </div>
+
+                <div className="space-y-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => switchTab('login')}
+                    className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.99] cursor-pointer"
+                  >
+                    <span>Back to Sign In</span>
+                    <ArrowRight size={16} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => switchTab('reset')}
+                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-medium transition-colors cursor-pointer"
+                  >
+                    Enter a different email
+                  </button>
+                </div>
+              </div>
             ) : (
-              /* Cloud Account Forms: Login, Sign Up, or Password Reset */
+              /* Mode 4: Cloud Forms (Login, Sign Up, or Request Reset Link) */
               <div className="space-y-4 pt-1">
-                {/* Cloud Tabs (Sign In vs Create Account vs Reset) */}
                 <div className="flex items-center justify-between pb-1 border-b border-slate-800/80">
                   <h2 className="text-sm sm:text-base font-semibold text-slate-100">
                     {authTab === 'login'
@@ -395,7 +528,6 @@ export const BootScreen: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Form Elements */}
                 <form
                   onSubmit={
                     authTab === 'login'
@@ -406,7 +538,6 @@ export const BootScreen: React.FC = () => {
                   }
                   className="space-y-3.5"
                 >
-                  {/* Full Name field (Required for Signup) */}
                   {authTab === 'signup' && (
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-300 block">
@@ -426,7 +557,6 @@ export const BootScreen: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Email Address */}
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-slate-300 block">
                       Email Address <span className="text-rose-400">*</span>
@@ -444,7 +574,6 @@ export const BootScreen: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Password (for login and signup) */}
                   {authTab !== 'reset' && (
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-300 block">
@@ -472,7 +601,6 @@ export const BootScreen: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Confirm Password (for signup) */}
                   {authTab === 'signup' && (
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-300 block">
@@ -500,59 +628,37 @@ export const BootScreen: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Feedback Alerts */}
                   {authError && (
                     <div className="p-3.5 rounded-2xl bg-rose-950/70 border border-rose-800 text-xs text-rose-200 space-y-2">
                       <div className="flex items-start gap-2">
                         <AlertCircle size={16} className="shrink-0 mt-0.5 text-rose-400" />
-                        <div className="font-semibold text-rose-200">
-                          {authError.includes('SMTP') ? 'Cloud Email Delivery Issue (535)' : 'Authentication Notice'}
-                        </div>
+                        <div className="font-semibold text-rose-200">Authentication Notice</div>
                       </div>
                       <p className="text-[12px] text-rose-300/90 leading-relaxed pl-6">
                         {authError}
                       </p>
-                      {authError.includes('SMTP') && (
-                        <div className="mt-2 ml-6 p-2.5 rounded-xl bg-black/50 border border-rose-900/60 text-[11px] text-slate-300 space-y-1.5">
-                          <div className="font-semibold text-rose-300">How to fix in 1 minute:</div>
-                          <p>
-                            1. Open your <strong>Supabase Dashboard</strong> &rarr; <strong>Settings</strong> &rarr; <strong>Authentication</strong> &rarr; <strong>SMTP Settings</strong>.
-                          </p>
-                          <p>
-                            2. <strong>Fastest fix:</strong> Toggle <strong>"Enable Custom SMTP" to OFF</strong> and click <strong>Save</strong>. Supabase will send reset emails instantly using its default built-in mailer.
-                          </p>
-                          <p>
-                            3. <strong>Or with Gmail:</strong> Generate a 16-character App Password at <span className="text-blue-400 font-mono">myaccount.google.com/apppasswords</span> and enter it as your SMTP password.
-                          </p>
+                      {authError.toLowerCase().includes('not confirmed') && (
+                        <div className="pl-6 pt-1">
+                          <button
+                            type="button"
+                            onClick={handleResendConfirmation}
+                            className="px-3 py-1.5 rounded-lg bg-rose-900/60 hover:bg-rose-800 text-white font-medium text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Send size={12} />
+                            <span>Resend Confirmation Email</span>
+                          </button>
                         </div>
                       )}
                     </div>
                   )}
 
                   {authSuccess && (
-                    <div className="p-3.5 rounded-2xl bg-emerald-950/70 border border-emerald-800 text-xs text-emerald-200 space-y-2.5">
-                      <div className="flex items-start gap-2">
-                        <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-400" />
-                        <span className="font-semibold text-emerald-300">{authSuccess}</span>
-                      </div>
-                      <div className="p-3 rounded-xl bg-black/40 border border-emerald-900/60 text-[11px] text-slate-300 space-y-1.5">
-                        <div className="font-medium text-emerald-300">How to set your new password:</div>
-                        <p>1. Open your inbox and look for the <strong>Reset Password</strong> email.</p>
-                        <p>2. Click the <strong>Reset Password link</strong> inside the email.</p>
-                        <p>3. WebOS will automatically launch the <strong>Create New Password</strong> form.</p>
-                        <button
-                          type="button"
-                          onClick={() => setIsRecoveryMode(true)}
-                          className="mt-2 w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow transition-colors cursor-pointer"
-                        >
-                          <KeyRound size={13} />
-                          <span>Enter Reset Code or Set Password Now</span>
-                        </button>
-                      </div>
+                    <div className="p-3.5 rounded-2xl bg-emerald-950/70 border border-emerald-800 text-xs text-emerald-200 flex items-start gap-2">
+                      <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-400" />
+                      <span className="font-semibold text-emerald-300">{authSuccess}</span>
                     </div>
                   )}
 
-                  {/* Submit Button */}
                   <div className="pt-2">
                     <button
                       type="submit"
@@ -572,7 +678,6 @@ export const BootScreen: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Sub-links */}
                   <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
                     {authTab === 'login' ? (
                       <>
@@ -610,13 +715,6 @@ export const BootScreen: React.FC = () => {
                         >
                           <RotateCcw size={12} />
                           <span>Back to Sign In</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setIsRecoveryMode(true)}
-                          className="text-[11px] text-slate-400 hover:text-blue-400 underline transition-colors cursor-pointer"
-                        >
-                          Have a 6-digit email code? Enter it here
                         </button>
                       </div>
                     )}

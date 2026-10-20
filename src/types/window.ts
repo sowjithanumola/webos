@@ -10,9 +10,7 @@ export type AppId =
   | 'image-viewer'
   | 'media-player'
   | 'code-studio'
-  | 'docs-studio'
-  | 'supabase-sql'
-  | 'sql-studio';
+  | 'docs-studio';
 
 export interface WindowPosition {
   x: number;

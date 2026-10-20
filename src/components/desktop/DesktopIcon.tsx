@@ -24,18 +24,26 @@ export const DesktopIcon: React.FC<DesktopIconProps> = ({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
-      className={`group flex flex-col items-center justify-center p-2 rounded-xl w-20 h-22 cursor-pointer transition-all select-none border ${
+      title={name}
+      className={`group flex flex-col items-center justify-start p-2 rounded-2xl w-24 min-h-[96px] cursor-pointer transition-all select-none border ${
         isSelected
-          ? 'bg-blue-600/30 border-blue-500/50 shadow-md ring-1 ring-blue-400/40 text-white'
-          : 'border-transparent hover:bg-white/10 text-slate-100 hover:text-white'
+          ? 'bg-blue-600/35 border-blue-400/60 shadow-lg ring-1 ring-blue-400/50 text-white'
+          : 'border-transparent hover:bg-white/12 text-slate-100 hover:text-white'
       }`}
     >
-      <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-slate-900/40 backdrop-blur-md border border-white/10 group-hover:scale-105 transition-transform shadow-lg">
-        <AppIcon id={id} size={24} className="text-white drop-shadow" />
+      {/* App Icon Container */}
+      <div className="w-13 h-13 rounded-2xl flex items-center justify-center bg-slate-900/50 backdrop-blur-md border border-white/15 group-hover:scale-105 group-hover:border-white/30 transition-transform shadow-xl shrink-0">
+        <AppIcon id={id} size={26} className="text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]" />
       </div>
-      <span className="text-[11px] font-medium mt-1.5 text-center truncate w-full px-1 drop-shadow-md">
-        {name}
-      </span>
+
+      {/* App Label with full multiline visibility (no clipping or ellipsis like '...') */}
+      <div className="w-full mt-1.5 flex items-center justify-center">
+        <span
+          className="text-[11.5px] font-medium text-center leading-snug line-clamp-2 break-words w-full px-0.5 text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] [text-shadow:_0_1px_3px_rgba(0,0,0,0.95)] tracking-tight"
+        >
+          {name}
+        </span>
+      </div>
     </div>
   );
 };

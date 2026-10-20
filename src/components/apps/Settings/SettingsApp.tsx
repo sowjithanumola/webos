@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useOS } from '../../../context/OSContext';
 import { useAuth } from '../../../context/AuthContext';
+import { SUPABASE_PROJECT_URL } from '../../../services/supabase';
 import { WALLPAPER_OPTIONS } from '../../../config/wallpapers';
 import { AccentColor, WallpaperId, WebOSBackup } from '../../../types/system';
 
@@ -31,7 +32,7 @@ export const SettingsApp: React.FC = () => {
     importBackup,
     addNotification,
   } = useOS();
-  const { user, signOut, migrateGuestFilesToCloud, cloudStatus, updateProfileName, updatePassword } = useAuth();
+  const { user, signOut, migrateGuestFilesToCloud, updateProfileName, updatePassword } = useAuth();
   const [migrating, setMigrating] = useState<boolean>(false);
   const [fullNameInput, setFullNameInput] = useState<string>(user?.user_metadata?.full_name || '');
   const [updatingName, setUpdatingName] = useState<boolean>(false);
@@ -500,7 +501,7 @@ export const SettingsApp: React.FC = () => {
                       </button>
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      Your full name is synchronized to your cloud user metadata.
+                      Your full name is synchronized to your cloud user metadata and profiles table.
                     </p>
                   </div>
 
@@ -596,7 +597,7 @@ export const SettingsApp: React.FC = () => {
                     You are currently using isolated browser local storage. Sign in on the WebOS boot screen to link your files to your cloud account.
                   </p>
                   <div className="text-[11px] text-slate-500 font-mono">
-                    Cloud Storage Target: https://pefojvlsqnbdikxismgf.supabase.co
+                    Cloud Storage Target: {SUPABASE_PROJECT_URL}
                   </div>
                 </div>
               )}

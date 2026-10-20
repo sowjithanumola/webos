@@ -1,15 +1,15 @@
-import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
-import { VirtualFile, FileSystemState } from '../types/fs';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { VirtualFile } from '../types/fs';
 
-const SUPABASE_URL =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
-  'https://pefojvlsqnbdikxismgf.supabase.co';
+// Always use the active Supabase project credentials and ignore any stale deleted project env vars
+export const SUPABASE_PROJECT_URL = 'https://jhgflaywnboxrpkmzjxk.supabase.co';
 
-const SUPABASE_ANON_KEY =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBlZm9qdmxzcW5iZGlreGlzbWdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5ODExMzAsImV4cCI6MjEwNzU1NzEzMH0.oxR1G22i02mgWUJeMPBPDQwIhwrFSrI8O5x7ZwrIr9k';
+export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_9Fi7FXHsI0amaTvnsMJ_Hw_GQQH2J24';
 
-export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+export const SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoZ2ZsYXl3bmJveHJwa216anhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0ODU4MDYsImV4cCI6MjEwODA2MTgwNn0.cCmYutyx7M7AAgcEDt8XAiE-ValRHK0t3riqAwmhQHY';
+
+export const supabase: SupabaseClient = createClient(SUPABASE_PROJECT_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
@@ -56,6 +56,24 @@ export class CloudStorageService {
     this.listeners.forEach((l) => l(status));
   }
 
+  // Upsert user profile in public.profiles table
+  public async upsertUserProfile(userId: string, email: string, fullName: string): Promise<void> {
+    if (!userId) return;
+    try {
+      await supabase.from('profiles').upsert(
+        {
+          id: userId,
+          email,
+          full_name: fullName,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
+    } catch {
+      // Profile sync is best-effort if table not yet created
+    }
+  }
+
   // Load user files from Supabase Postgres
   public async loadUserFiles(userId: string): Promise<Record<string, VirtualFile> | null> {
     if (!userId) return null;
@@ -75,7 +93,7 @@ export class CloudStorageService {
 
       if (!data || data.length === 0) {
         this.setStatus('synced');
-        return null; // Empty cloud workspace
+        return null;
       }
 
       const nodes: Record<string, VirtualFile> = {};
@@ -191,7 +209,6 @@ export class CloudStorageService {
         updated_at: new Date(node.updatedAt).toISOString(),
       }));
 
-      // Batch in chunks of 50
       let migrated = 0;
       for (let i = 0; i < records.length; i += 50) {
         const chunk = records.slice(i, i + 50);

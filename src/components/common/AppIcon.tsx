@@ -71,10 +71,6 @@ export const AppIcon: React.FC<AppIconProps> = ({ id, name, className = 'w-5 h-5
       return <BookOpen size={size} className={className} />;
     case 'Globe':
       return <Globe size={size} className={className} />;
-    case 'supabase-sql':
-    case 'sql-studio':
-    case 'Database':
-      return <Database size={size} className={className} />;
     default:
       return <File size={size} className={className} />;
   }

@@ -15,9 +15,14 @@ interface AuthContextType {
   setRecoveryError: (error: string | null) => void;
   clearRecoveryState: () => void;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: AuthError | null; user: User | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string
+  ) => Promise<{ error: AuthError | null; user: User | null; session: Session | null; needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
+  resendConfirmationEmail: (email: string) => Promise<{ error: AuthError | null }>;
   verifyRecoveryOtp: (email: string, token: string) => Promise<{ error: AuthError | null }>;
   updatePassword: (newPassword: string) => Promise<{ error: AuthError | null }>;
   updateProfileName: (fullName: string) => Promise<{ error: AuthError | null }>;
@@ -27,7 +32,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Helper to inspect initial URL for recovery route, parameters, or errors
 const inspectRecoveryFromUrl = (): { isRecovery: boolean; error: string | null } => {
   if (typeof window === 'undefined') return { isRecovery: false, error: null };
 
@@ -42,9 +46,12 @@ const inspectRecoveryFromUrl = (): { isRecovery: boolean; error: string | null }
   const errorCode = hashParams.get('error_code') || searchParams.get('error_code');
   const type = hashParams.get('type') || searchParams.get('type');
 
-  const isResetRoute = pathname === '/reset-password' || pathname.endsWith('/reset-password') || pathname.includes('reset-password');
+  const isResetRoute =
+    pathname === '/reset-password' ||
+    pathname.endsWith('/reset-password') ||
+    pathname.includes('reset-password');
   const code = searchParams.get('code') || hashParams.get('code');
-  const token = searchParams.get('token') || hashParams.get('token');
+  const token = searchParams.get('token') || hashParams.get('token') || searchParams.get('token_hash') || hashParams.get('token_hash');
   const isRecoveryType =
     type === 'recovery' ||
     hash.includes('type=recovery') ||
@@ -56,11 +63,11 @@ const inspectRecoveryFromUrl = (): { isRecovery: boolean; error: string | null }
   let parsedError: string | null = null;
   if (errorDesc || errorCode) {
     if (errorCode === 'otp_expired') {
-      parsedError = 'The password reset link has expired or has already been used. Please request a new link.';
+      parsedError = 'The password reset link has expired or has already been used. Please request a new reset email link below.';
     } else if (errorDesc) {
       parsedError = decodeURIComponent(errorDesc.replace(/\+/g, ' '));
     } else {
-      parsedError = 'This password reset link is invalid or expired. Please request a new link.';
+      parsedError = 'This password reset link is invalid or expired. Please request a new reset email.';
     }
 
     try {
@@ -85,12 +92,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const [cloudStatus, setCloudStatus] = useState<CloudSyncStatus>('guest');
 
-  // Recovery mode state
   const initialRecovery = inspectRecoveryFromUrl();
   const [isRecoveryMode, setIsRecoveryMode] = useState<boolean>(initialRecovery.isRecovery);
   const [recoveryError, setRecoveryError] = useState<string | null>(initialRecovery.error);
 
-  // Sync cloud status
   useEffect(() => {
     const unsub = cloudStorage.subscribeStatus((status) => {
       setCloudStatus(status);
@@ -98,7 +103,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsub;
   }, []);
 
-  // Initialize Supabase session and listen for auth changes
   useEffect(() => {
     let mounted = true;
 
@@ -112,6 +116,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(initSession.user);
         setIsGuest(false);
         localStorage.removeItem('webos_auth_mode');
+      } else if (typeof window !== 'undefined') {
+        const searchP = new URLSearchParams(window.location.search);
+        const hashP = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+        const tokenHashParam =
+          searchP.get('token_hash') ||
+          hashP.get('token_hash') ||
+          searchP.get('token') ||
+          hashP.get('token');
+        if (tokenHashParam && tokenHashParam.length > 10) {
+          supabase.auth
+            .verifyOtp({
+              token_hash: tokenHashParam,
+              type: 'recovery',
+            })
+            .then(({ data: verifyData, error: verifyErr }) => {
+              if (!mounted) return;
+              if (!verifyErr && verifyData.session) {
+                setSession(verifyData.session);
+                setUser(verifyData.user);
+                setIsRecoveryMode(true);
+                setRecoveryError(null);
+              }
+            });
+        }
       }
       setLoading(false);
     });
@@ -148,7 +176,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
     if (!error && data.session) {
       setSession(data.session);
       setUser(data.user);
@@ -160,8 +191,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUp = async (email: string, password: string, fullName: string) => {
     const cleanName = fullName.trim() || email.split('@')[0];
+    const cleanEmail = email.trim();
     const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
+      email: cleanEmail,
       password,
       options: {
         data: {
@@ -171,15 +203,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (!error && data.user) {
-      setUser(data.user);
       if (data.session) {
+        // Instant sign-in without email confirmation
+        setUser(data.user);
         setSession(data.session);
         setIsGuest(false);
         localStorage.removeItem('webos_auth_mode');
+        await cloudStorage.upsertUserProfile(data.user.id, cleanEmail, cleanName);
       }
     }
 
-    return { error, user: data.user };
+    return {
+      error,
+      user: data.user,
+      session: data.session,
+      needsEmailConfirmation: !error && Boolean(data.user) && !data.session,
+    };
+  };
+
+  const resendConfirmationEmail = async (email: string) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+    });
+    return { error };
   };
 
   const signOut = async () => {
@@ -202,7 +249,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let cleanToken = rawInput.trim();
     const cleanEmail = email.trim();
 
-    // If user pasted a full URL (e.g. copied directly from the email link or address bar)
     if (
       cleanToken.startsWith('http://') ||
       cleanToken.startsWith('https://') ||
@@ -218,7 +264,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const searchP = new URLSearchParams(parsed.search);
         const hashP = new URLSearchParams(parsed.hash.replace(/^#/, ''));
 
-        // Check for access_token in hash or query
         const accessToken = hashP.get('access_token') || searchP.get('access_token');
         const refreshToken = hashP.get('refresh_token') || searchP.get('refresh_token');
         if (accessToken) {
@@ -235,7 +280,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        // Check for token, token_hash, or code
         const extracted =
           searchP.get('token') ||
           hashP.get('token') ||
@@ -250,14 +294,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Method 1: Standard OTP with email (works for 6-digit codes and email tokens)
     let res = await supabase.auth.verifyOtp({
       email: cleanEmail,
       token: cleanToken,
       type: 'recovery',
     });
 
-    // Method 2: If failed and token is a long hash (>10 chars), try token_hash directly
     if (res.error && cleanToken.length > 10) {
       const hashRes = await supabase.auth.verifyOtp({
         token_hash: cleanToken,
@@ -268,7 +310,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Method 3: If token is a PKCE exchange code (>15 chars)
     if (res.error && cleanToken.length > 15) {
       try {
         const exchangeRes = await supabase.auth.exchangeCodeForSession(cleanToken);
@@ -312,6 +353,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     if (!error && data.user) {
       setUser(data.user);
+      await cloudStorage.upsertUserProfile(data.user.id, data.user.email || '', cleanName);
     }
     return { error };
   };
@@ -345,6 +387,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signUp,
         signOut,
         resetPassword,
+        resendConfirmationEmail,
         verifyRecoveryOtp,
         updatePassword,
         updateProfileName,

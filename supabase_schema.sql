@@ -1,9 +1,72 @@
 -- ==============================================================================
--- WebOS Supabase Database Schema & Row-Level Security (RLS) Policies
--- Run this in the Supabase Dashboard -> SQL Editor
+-- WebOS Supabase Database Schema, Triggers & Row-Level Security (RLS) Policies
+-- Project: https://jhgflaywnboxrpkmzjxk.supabase.co
+-- Run this entire script in: Supabase Dashboard -> SQL Editor -> New Query
 -- ==============================================================================
 
--- 1. Create table for user-specific virtual files and folders
+-- 1. Create User Profiles Table (Synced with auth.users)
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT,
+  full_name TEXT,
+  avatar_color TEXT DEFAULT '#38bdf8',
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
+CREATE POLICY "Users can view own profile"
+  ON public.profiles
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
+CREATE POLICY "Users can insert own profile"
+  ON public.profiles
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile"
+  ON public.profiles
+  FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
+
+-- Automatically create/update a profile row whenever a new user signs up
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, updated_at)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
+    timezone('utc'::text, now())
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET
+    email = EXCLUDED.email,
+    full_name = COALESCE(EXCLUDED.full_name, public.profiles.full_name),
+    updated_at = timezone('utc'::text, now());
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT OR UPDATE ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- 2. Create Table for User Virtual Files and Folders
 CREATE TABLE IF NOT EXISTS public.user_files (
   id TEXT NOT NULL,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -21,15 +84,12 @@ CREATE TABLE IF NOT EXISTS public.user_files (
   CONSTRAINT user_files_pkey PRIMARY KEY (id, user_id)
 );
 
--- 2. Create indexes for quick directory lookups and search
 CREATE INDEX IF NOT EXISTS idx_user_files_user_id ON public.user_files(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_files_parent ON public.user_files(user_id, parent_id);
 CREATE INDEX IF NOT EXISTS idx_user_files_path ON public.user_files(user_id, path);
 
--- 3. Enable Row-Level Security on user_files
 ALTER TABLE public.user_files ENABLE ROW LEVEL SECURITY;
 
--- 4. RLS Policies: Authenticated users can only access and manipulate their own files
 DROP POLICY IF EXISTS "Users can read own files" ON public.user_files;
 CREATE POLICY "Users can read own files"
   ON public.user_files
@@ -59,14 +119,13 @@ CREATE POLICY "Users can delete own files"
   TO authenticated
   USING (auth.uid() = user_id);
 
--- 5. Create table for user settings & desktop customizations
+-- 3. Create Table for User Settings & Desktop Customizations
 CREATE TABLE IF NOT EXISTS public.user_settings (
   user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   settings_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 6. Enable Row-Level Security on user_settings
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can read own settings" ON public.user_settings;

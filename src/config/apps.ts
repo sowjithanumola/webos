@@ -123,17 +123,6 @@ export const APP_CATALOG: AppDefinition[] = [
     isPinnedDefault: true,
   },
   {
-    id: 'supabase-sql',
-    name: 'SQL Studio',
-    description: 'PostgreSQL query studio with Local Cloud sandbox, Cloud Login, schema inspector, and results grid',
-    icon: 'Database',
-    defaultTitle: 'SQL Studio — Local & Cloud PostgreSQL',
-    defaultSize: { width: 940, height: 620 },
-    minSize: { width: 580, height: 420 },
-    category: 'productivity',
-    isPinnedDefault: true,
-  },
-  {
     id: 'settings',
     name: 'Settings',
     description: 'System appearance, wallpapers, scale, sound and backup',
