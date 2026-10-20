@@ -1,19 +1,13 @@
 import React from 'react';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import { OSProvider, useOS } from './context/OSContext';
 import { BootScreen } from './components/boot/BootScreen';
 import { LockScreen } from './components/boot/LockScreen';
-import { ResetPasswordScreen } from './components/boot/ResetPasswordScreen';
 import { Desktop } from './components/desktop/Desktop';
 import { Power } from 'lucide-react';
 
 const OSContent: React.FC = () => {
   const { isBooted, isLocked, isShutDown, bootOS } = useOS();
-  const { isRecoveryMode } = useAuth();
-
-  if (isRecoveryMode) {
-    return <ResetPasswordScreen />;
-  }
 
   if (isShutDown) {
     return (

@@ -10,7 +10,6 @@ import {
   LogOut,
   CheckCircle2,
   AlertCircle,
-  RotateCcw,
   MailCheck,
   Send,
   Sparkles,
@@ -25,13 +24,12 @@ export const BootScreen: React.FC = () => {
     signIn,
     signUp,
     signOut,
-    resetPassword,
     resendConfirmationEmail,
     continueAsGuest,
     migrateGuestFilesToCloud,
   } = useAuth();
 
-  const [authTab, setAuthTab] = useState<'guest' | 'login' | 'signup' | 'reset' | 'confirm-email' | 'reset-sent'>('guest');
+  const [authTab, setAuthTab] = useState<'guest' | 'login' | 'signup' | 'confirm-email'>('guest');
 
   // Guest profile state
   const [profileName, setProfileName] = useState<string>(settings.profile.name || 'Administrator');
@@ -165,7 +163,7 @@ export const BootScreen: React.FC = () => {
     if (error) {
       setAuthError(error.message);
     } else if (needsEmailConfirmation) {
-      // Transition to the confirmation screen!
+      // Transition to confirmation screen
       setPendingConfirmationEmail(cleanEmail);
       setAuthTab('confirm-email');
       addNotification('Confirmation Required', `Verification email sent to ${cleanEmail}`, 'info');
@@ -180,29 +178,6 @@ export const BootScreen: React.FC = () => {
       setTimeout(() => {
         bootOS();
       }, 700);
-    }
-  };
-
-  const handlePasswordReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanEmail = email.trim();
-    if (!cleanEmail) {
-      setAuthError('Please enter your account email address.');
-      return;
-    }
-
-    setAuthLoading(true);
-    setAuthError(null);
-    setAuthSuccess(null);
-
-    const { error } = await resetPassword(cleanEmail);
-    setAuthLoading(false);
-
-    if (error) {
-      setAuthError(error.message);
-    } else {
-      setPendingConfirmationEmail(cleanEmail);
-      setAuthTab('reset-sent');
     }
   };
 
@@ -460,82 +435,20 @@ export const BootScreen: React.FC = () => {
                   </button>
                 </div>
               </div>
-            ) : authTab === 'reset-sent' ? (
-              /* Mode 3: Forgot Password Link Sent Screen */
-              <div className="space-y-5 pt-1 text-center">
-                <div className="w-16 h-16 mx-auto rounded-3xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-500/10">
-                  <CheckCircle2 size={32} />
-                </div>
-
-                <div className="space-y-1.5">
-                  <h2 className="text-lg font-bold text-slate-100">Password Reset Link Sent</h2>
-                  <p className="text-xs sm:text-sm text-slate-400">
-                    We sent a secure recovery link to:
-                  </p>
-                  <div className="inline-block px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-300 font-medium">
-                    {pendingConfirmationEmail || email}
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-left text-xs text-slate-300 space-y-2.5">
-                  <div className="font-semibold text-slate-200">How to reset your password:</div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-slate-400 text-[12px] leading-relaxed">
-                    <li>Check your inbox for an email titled <strong>"Reset Password"</strong>.</li>
-                    <li>Click the <strong>"Reset Password"</strong> link inside the email.</li>
-                    <li>WebOS will automatically open the password reset screen with your session verified.</li>
-                  </ol>
-                  <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-800/40 text-[11px] text-emerald-300">
-                    💡 <strong>No code required:</strong> Simply click the link in your email to choose your new password.
-                  </div>
-                </div>
-
-                <div className="space-y-2.5 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => switchTab('login')}
-                    className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.99] cursor-pointer"
-                  >
-                    <span>Back to Sign In</span>
-                    <ArrowRight size={16} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => switchTab('reset')}
-                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-medium transition-colors cursor-pointer"
-                  >
-                    Enter a different email
-                  </button>
-                </div>
-              </div>
             ) : (
-              /* Mode 4: Cloud Forms (Login, Sign Up, or Request Reset Link) */
+              /* Mode 3: Cloud Login & Sign Up Forms (No Forgot Password) */
               <div className="space-y-4 pt-1">
                 <div className="flex items-center justify-between pb-1 border-b border-slate-800/80">
                   <h2 className="text-sm sm:text-base font-semibold text-slate-100">
-                    {authTab === 'login'
-                      ? 'Sign In to Cloud'
-                      : authTab === 'signup'
-                      ? 'Create New Cloud Account'
-                      : 'Reset Your Password'}
+                    {authTab === 'login' ? 'Sign In to Cloud' : 'Create New Cloud Account'}
                   </h2>
                   <span className="text-[11px] text-slate-400">
-                    {authTab === 'login'
-                      ? 'Cloud Workspace'
-                      : authTab === 'signup'
-                      ? 'Free Account'
-                      : 'Account Recovery'}
+                    {authTab === 'login' ? 'Cloud Workspace' : 'Free Account'}
                   </span>
                 </div>
 
                 <form
-                  onSubmit={
-                    authTab === 'login'
-                      ? handleLogin
-                      : authTab === 'signup'
-                      ? handleSignUp
-                      : handlePasswordReset
-                  }
+                  onSubmit={authTab === 'login' ? handleLogin : handleSignUp}
                   className="space-y-3.5"
                 >
                   {authTab === 'signup' && (
@@ -574,32 +487,30 @@ export const BootScreen: React.FC = () => {
                     </div>
                   </div>
 
-                  {authTab !== 'reset' && (
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-300 block">
-                        Password <span className="text-rose-400">*</span>
-                      </label>
-                      <div className="relative">
-                        <Lock size={15} className="absolute left-3.5 top-3 text-slate-500" />
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          required
-                          placeholder={authTab === 'signup' ? 'At least 6 characters' : '••••••••'}
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 select-text"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
-                          title={showPassword ? 'Hide password' : 'Show password'}
-                        >
-                          {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300 block">
+                      Password <span className="text-rose-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <Lock size={15} className="absolute left-3.5 top-3 text-slate-500" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        placeholder={authTab === 'signup' ? 'At least 6 characters' : '••••••••'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 select-text"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
+                        title={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
                     </div>
-                  )}
+                  </div>
 
                   {authTab === 'signup' && (
                     <div className="space-y-1">
@@ -670,53 +581,29 @@ export const BootScreen: React.FC = () => {
                           ? 'Processing...'
                           : authTab === 'login'
                           ? 'Sign In to Cloud'
-                          : authTab === 'signup'
-                          ? 'Create Cloud Account'
-                          : 'Send Password Reset Link'}
+                          : 'Create Cloud Account'}
                       </span>
                       <ArrowRight size={15} />
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
+                  <div className="flex items-center justify-center text-xs text-slate-400 pt-2 border-t border-slate-800/80">
                     {authTab === 'login' ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => switchTab('signup')}
-                          className="hover:text-blue-400 transition-colors cursor-pointer"
-                        >
-                          Need an account? <span className="text-blue-400 underline">Sign up</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => switchTab('reset')}
-                          className="hover:text-slate-200 transition-colors cursor-pointer"
-                        >
-                          Forgot password?
-                        </button>
-                      </>
-                    ) : authTab === 'signup' ? (
-                      <div className="w-full text-center">
-                        <button
-                          type="button"
-                          onClick={() => switchTab('login')}
-                          className="hover:text-blue-400 transition-colors cursor-pointer"
-                        >
-                          Already have an account? <span className="text-blue-400 underline">Sign in</span>
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => switchTab('signup')}
+                        className="hover:text-blue-400 transition-colors cursor-pointer"
+                      >
+                        Need an account? <span className="text-blue-400 underline">Sign up</span>
+                      </button>
                     ) : (
-                      <div className="w-full flex flex-col items-center gap-2 text-center">
-                        <button
-                          type="button"
-                          onClick={() => switchTab('login')}
-                          className="hover:text-blue-400 transition-colors cursor-pointer inline-flex items-center gap-1"
-                        >
-                          <RotateCcw size={12} />
-                          <span>Back to Sign In</span>
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => switchTab('login')}
+                        className="hover:text-blue-400 transition-colors cursor-pointer"
+                      >
+                        Already have an account? <span className="text-blue-400 underline">Sign in</span>
+                      </button>
                     )}
                   </div>
                 </form>

@@ -9,11 +9,6 @@ interface AuthContextType {
   loading: boolean;
   isGuest: boolean;
   cloudStatus: CloudSyncStatus;
-  isRecoveryMode: boolean;
-  recoveryError: string | null;
-  setIsRecoveryMode: (mode: boolean) => void;
-  setRecoveryError: (error: string | null) => void;
-  clearRecoveryState: () => void;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signUp: (
     email: string,
@@ -21,9 +16,7 @@ interface AuthContextType {
     fullName: string
   ) => Promise<{ error: AuthError | null; user: User | null; session: Session | null; needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
   resendConfirmationEmail: (email: string) => Promise<{ error: AuthError | null }>;
-  verifyRecoveryOtp: (email: string, token: string) => Promise<{ error: AuthError | null }>;
   updatePassword: (newPassword: string) => Promise<{ error: AuthError | null }>;
   updateProfileName: (fullName: string) => Promise<{ error: AuthError | null }>;
   continueAsGuest: () => void;
@@ -32,57 +25,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const inspectRecoveryFromUrl = (): { isRecovery: boolean; error: string | null } => {
-  if (typeof window === 'undefined') return { isRecovery: false, error: null };
-
-  const pathname = window.location.pathname;
-  const hash = window.location.hash || '';
-  const search = window.location.search || '';
-
-  const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
-  const searchParams = new URLSearchParams(search);
-
-  const errorDesc = hashParams.get('error_description') || searchParams.get('error_description');
-  const errorCode = hashParams.get('error_code') || searchParams.get('error_code');
-  const type = hashParams.get('type') || searchParams.get('type');
-
-  const isResetRoute =
-    pathname === '/reset-password' ||
-    pathname.endsWith('/reset-password') ||
-    pathname.includes('reset-password');
-  const code = searchParams.get('code') || hashParams.get('code');
-  const token = searchParams.get('token') || hashParams.get('token') || searchParams.get('token_hash') || hashParams.get('token_hash');
-  const isRecoveryType =
-    type === 'recovery' ||
-    hash.includes('type=recovery') ||
-    search.includes('type=recovery') ||
-    hash.includes('access_token=') ||
-    !!code ||
-    !!token;
-
-  let parsedError: string | null = null;
-  if (errorDesc || errorCode) {
-    if (errorCode === 'otp_expired') {
-      parsedError = 'The password reset link has expired or has already been used. Please request a new reset email link below.';
-    } else if (errorDesc) {
-      parsedError = decodeURIComponent(errorDesc.replace(/\+/g, ' '));
-    } else {
-      parsedError = 'This password reset link is invalid or expired. Please request a new reset email.';
-    }
-
-    try {
-      window.history.replaceState(null, '', window.location.pathname);
-    } catch {
-      // ignore
-    }
-  }
-
-  return {
-    isRecovery: isResetRoute || isRecoveryType || !!parsedError,
-    error: parsedError,
-  };
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -90,141 +32,158 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isGuest, setIsGuest] = useState<boolean>(() => {
     return localStorage.getItem('webos_auth_mode') === 'guest';
   });
-  const [cloudStatus, setCloudStatus] = useState<CloudSyncStatus>('guest');
+  const [cloudStatus, setCloudStatus] = useState<CloudSyncStatus>(() => {
+    return cloudStorage.getStatus();
+  });
 
-  const initialRecovery = inspectRecoveryFromUrl();
-  const [isRecoveryMode, setIsRecoveryMode] = useState<boolean>(initialRecovery.isRecovery);
-  const [recoveryError, setRecoveryError] = useState<string | null>(initialRecovery.error);
-
-  useEffect(() => {
-    const unsub = cloudStorage.subscribeStatus((status) => {
-      setCloudStatus(status);
-    });
-    return unsub;
-  }, []);
-
+  // Track initial auth state and subscription
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data: { session: initSession }, error }) => {
+    // Subscribe to cloudStorage status updates
+    const unsubscribeCloud = cloudStorage.subscribeStatus((status) => {
+      if (mounted) {
+        setCloudStatus(status);
+      }
+    });
+
+    // Get current active session
+    supabase.auth.getSession().then(({ data: { session: initialSession }, error }) => {
       if (!mounted) return;
       if (error) {
-        console.warn('[Supabase Auth] Failed to fetch session:', error);
+        console.error('Supabase getSession error:', error);
       }
-      if (initSession) {
-        setSession(initSession);
-        setUser(initSession.user);
+
+      if (initialSession?.user) {
+        setSession(initialSession);
+        setUser(initialSession.user);
         setIsGuest(false);
         localStorage.removeItem('webos_auth_mode');
-      } else if (typeof window !== 'undefined') {
-        const searchP = new URLSearchParams(window.location.search);
-        const hashP = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
-        const tokenHashParam =
-          searchP.get('token_hash') ||
-          hashP.get('token_hash') ||
-          searchP.get('token') ||
-          hashP.get('token');
-        if (tokenHashParam && tokenHashParam.length > 10) {
-          supabase.auth
-            .verifyOtp({
-              token_hash: tokenHashParam,
-              type: 'recovery',
-            })
-            .then(({ data: verifyData, error: verifyErr }) => {
-              if (!mounted) return;
-              if (!verifyErr && verifyData.session) {
-                setSession(verifyData.session);
-                setUser(verifyData.user);
-                setIsRecoveryMode(true);
-                setRecoveryError(null);
-              }
-            });
+      } else {
+        const storedMode = localStorage.getItem('webos_auth_mode');
+        if (storedMode === 'guest') {
+          setIsGuest(true);
         }
       }
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+    // Listen for auth state changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       if (!mounted) return;
 
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsRecoveryMode(true);
-        setRecoveryError(null);
-      }
-
-      setSession(newSession);
-      setUser(newSession?.user || null);
-      if (newSession?.user) {
+      if (currentSession?.user) {
+        setSession(currentSession);
+        setUser(currentSession.user);
         setIsGuest(false);
         localStorage.removeItem('webos_auth_mode');
+
+        // Sync files on sign in
+        if (event === 'SIGNED_IN') {
+          try {
+            await syncUserFilesFromCloud(currentSession.user.id);
+          } catch (err) {
+            console.error('Error syncing cloud files on sign-in:', err);
+          }
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setUser(null);
+        setIsGuest(true);
+        localStorage.setItem('webos_auth_mode', 'guest');
       }
-      setLoading(false);
     });
 
     return () => {
       mounted = false;
+      unsubscribeCloud();
       subscription.unsubscribe();
     };
   }, []);
 
-  const clearRecoveryState = useCallback(() => {
-    setIsRecoveryMode(false);
-    setRecoveryError(null);
-    if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
-      window.history.replaceState(null, '', '/');
+  // Sync files from Supabase down to local virtual filesystem
+  const syncUserFilesFromCloud = async (userId: string) => {
+    try {
+      const filesMap = await cloudStorage.loadUserFiles(userId);
+      if (filesMap && Object.keys(filesMap).length > 0) {
+        for (const file of Object.values(filesMap)) {
+          try {
+            const existing = fsService.getNodeByPath(file.path);
+            if (!existing) {
+              fsService.createFile(file.path, file.content || '', file.type);
+            }
+          } catch {
+            // ignore individual conflict
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to sync files from cloud:', err);
     }
-  }, []);
+  };
 
+  // User Actions
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
+
     if (!error && data.session) {
       setSession(data.session);
       setUser(data.user);
       setIsGuest(false);
       localStorage.removeItem('webos_auth_mode');
     }
+
     return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const cleanName = fullName.trim() || email.split('@')[0];
     const cleanEmail = email.trim();
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
       password,
       options: {
         data: {
-          full_name: cleanName,
+          full_name: fullName.trim() || 'WebOS User',
         },
       },
     });
 
-    if (!error && data.user) {
-      if (data.session) {
-        // Instant sign-in without email confirmation
-        setUser(data.user);
-        setSession(data.session);
-        setIsGuest(false);
-        localStorage.removeItem('webos_auth_mode');
-        await cloudStorage.upsertUserProfile(data.user.id, cleanEmail, cleanName);
-      }
+    if (error) {
+      return {
+        error,
+        user: null,
+        session: null,
+        needsEmailConfirmation: false,
+      };
+    }
+
+    const needsEmailConfirmation = Boolean(data.user && !data.session);
+
+    if (data.session && data.user) {
+      setSession(data.session);
+      setUser(data.user);
+      setIsGuest(false);
+      localStorage.removeItem('webos_auth_mode');
     }
 
     return {
-      error,
+      error: null,
       user: data.user,
       session: data.session,
-      needsEmailConfirmation: !error && Boolean(data.user) && !data.session,
+      needsEmailConfirmation,
     };
   };
 
   const resendConfirmationEmail = async (email: string) => {
+    const cleanEmail = email.trim();
     const { error } = await supabase.auth.resend({
       type: 'signup',
-      email: email.trim(),
+      email: cleanEmail,
     });
     return { error };
   };
@@ -237,124 +196,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('webos_auth_mode', 'guest');
   };
 
-  const resetPassword = async (email: string) => {
-    const redirectTo = `${window.location.origin}/reset-password`;
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo,
-    });
-    return { error };
-  };
-
-  const verifyRecoveryOtp = async (email: string, rawInput: string) => {
-    let cleanToken = rawInput.trim();
-    const cleanEmail = email.trim();
-
-    if (
-      cleanToken.startsWith('http://') ||
-      cleanToken.startsWith('https://') ||
-      cleanToken.includes('token=') ||
-      cleanToken.includes('access_token=') ||
-      cleanToken.includes('code=')
-    ) {
-      try {
-        const urlStr = cleanToken.includes('://')
-          ? cleanToken
-          : `https://dummy.com/${cleanToken.startsWith('#') || cleanToken.startsWith('?') ? cleanToken : '?' + cleanToken}`;
-        const parsed = new URL(urlStr);
-        const searchP = new URLSearchParams(parsed.search);
-        const hashP = new URLSearchParams(parsed.hash.replace(/^#/, ''));
-
-        const accessToken = hashP.get('access_token') || searchP.get('access_token');
-        const refreshToken = hashP.get('refresh_token') || searchP.get('refresh_token');
-        if (accessToken) {
-          const { data: sessionData, error: sessionErr } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken || '',
-          });
-          if (!sessionErr && sessionData.session) {
-            setSession(sessionData.session);
-            setUser(sessionData.user);
-            setIsRecoveryMode(true);
-            setRecoveryError(null);
-            return { error: null };
-          }
-        }
-
-        const extracted =
-          searchP.get('token') ||
-          hashP.get('token') ||
-          searchP.get('token_hash') ||
-          hashP.get('token_hash') ||
-          searchP.get('code');
-        if (extracted) {
-          cleanToken = extracted;
-        }
-      } catch {
-        // Fall back to raw string
-      }
-    }
-
-    let res = await supabase.auth.verifyOtp({
-      email: cleanEmail,
-      token: cleanToken,
-      type: 'recovery',
-    });
-
-    if (res.error && cleanToken.length > 10) {
-      const hashRes = await supabase.auth.verifyOtp({
-        token_hash: cleanToken,
-        type: 'recovery',
-      });
-      if (!hashRes.error && hashRes.data?.session) {
-        res = hashRes;
-      }
-    }
-
-    if (res.error && cleanToken.length > 15) {
-      try {
-        const exchangeRes = await supabase.auth.exchangeCodeForSession(cleanToken);
-        if (!exchangeRes.error && exchangeRes.data?.session) {
-          setSession(exchangeRes.data.session);
-          setUser(exchangeRes.data.user);
-          setIsRecoveryMode(true);
-          setRecoveryError(null);
-          return { error: null };
-        }
-      } catch {
-        // Continue with original error
-      }
-    }
-
-    if (!res.error && res.data?.session) {
-      setSession(res.data.session);
-      setUser(res.data.user);
-      setIsRecoveryMode(true);
-      setRecoveryError(null);
-    }
-    return { error: res.error };
-  };
-
   const updatePassword = async (newPassword: string) => {
-    const { data, error } = await supabase.auth.updateUser({
+    const { error } = await supabase.auth.updateUser({
       password: newPassword,
     });
-    if (!error && data.user) {
-      setUser(data.user);
-    }
     return { error };
   };
 
   const updateProfileName = async (fullName: string) => {
-    const cleanName = fullName.trim();
-    const { data, error } = await supabase.auth.updateUser({
-      data: {
-        full_name: cleanName,
-      },
+    if (!user) return { error: null };
+    const { error } = await supabase.auth.updateUser({
+      data: { full_name: fullName },
     });
-    if (!error && data.user) {
-      setUser(data.user);
-      await cloudStorage.upsertUserProfile(data.user.id, data.user.email || '', cleanName);
-    }
     return { error };
   };
 
@@ -365,8 +218,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const migrateGuestFilesToCloud = useCallback(async (): Promise<number> => {
     if (!user) return 0;
-    const localNodes = fsService.getState().nodes;
-    const migrated = await cloudStorage.migrateLocalFilesToCloud(user.id, localNodes);
+    const allNodes = fsService.getState().nodes;
+    const migrated = await cloudStorage.migrateLocalFilesToCloud(user.id, allNodes);
     return migrated;
   }, [user]);
 
@@ -378,17 +231,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         isGuest,
         cloudStatus,
-        isRecoveryMode,
-        recoveryError,
-        setIsRecoveryMode,
-        setRecoveryError,
-        clearRecoveryState,
         signIn,
         signUp,
         signOut,
-        resetPassword,
         resendConfirmationEmail,
-        verifyRecoveryOtp,
         updatePassword,
         updateProfileName,
         continueAsGuest,

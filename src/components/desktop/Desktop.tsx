@@ -82,7 +82,7 @@ export const Desktop: React.FC = () => {
       {/* Desktop Workspace Stage */}
       <main className="relative w-full h-[calc(100vh-36px)] overflow-hidden">
         {/* Desktop Icons Grid */}
-        <div className="p-4 grid grid-flow-col auto-cols-max grid-rows-6 gap-3 z-0 w-fit pointer-events-auto">
+        <div className="p-3 sm:p-4 flex flex-col flex-wrap max-h-[calc(100vh-120px)] gap-2 z-0 w-fit pointer-events-auto content-start items-start">
           {desktopApps.map((app) => (
             <DesktopIcon
               key={app.id}
