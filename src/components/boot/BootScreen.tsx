@@ -9,6 +9,11 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  User as UserIcon,
 } from 'lucide-react';
 import { useOS } from '../../context/OSContext';
 import { useAuth } from '../../context/AuthContext';
@@ -17,6 +22,8 @@ export const BootScreen: React.FC = () => {
   const { bootOS, settings, updateSettings, addNotification } = useOS();
   const {
     user,
+    signInWithEmail,
+    signUpWithEmail,
     signInWithGoogle,
     signOut,
     continueAsGuest,
@@ -24,10 +31,17 @@ export const BootScreen: React.FC = () => {
   } = useAuth();
 
   const [authTab, setAuthTab] = useState<'guest' | 'cloud'>('guest');
+  const [cloudAuthMode, setCloudAuthMode] = useState<'login' | 'signup'>('login');
 
   // Guest profile state
   const [profileName, setProfileName] = useState<string>(settings.profile.name || 'Administrator');
   const [avatarColor, setAvatarColor] = useState<string>(settings.profile.avatarColor || '#38bdf8');
+
+  // In-app credentials state (zero popups)
+  const [fullName, setFullName] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
 
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -98,6 +112,43 @@ export const BootScreen: React.FC = () => {
     bootOS();
   };
 
+  // In-App Email Login (Zero Popups)
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password) {
+      setAuthError('Please enter both your email and password.');
+      return;
+    }
+    setAuthLoading(true);
+    setAuthError(null);
+
+    let res;
+    if (cloudAuthMode === 'signup') {
+      res = await signUpWithEmail(email.trim(), password, fullName.trim() || 'WebOS User');
+    } else {
+      res = await signInWithEmail(email.trim(), password);
+    }
+    setAuthLoading(false);
+
+    if (res.error) {
+      if (res.error.message.includes('operation-not-allowed')) {
+        setAuthError('Email/Password provider is not yet enabled in Firebase Console. Please enable it under Auth → Sign-in method, or sign in with Google below.');
+      } else {
+        setAuthError(res.error.message);
+      }
+    } else if (res.user) {
+      updateSettings({
+        profile: {
+          ...settings.profile,
+          name: res.user.displayName || res.user.email?.split('@')[0] || 'User',
+        },
+      });
+      addNotification('Signed In', `Welcome back, ${res.user.displayName || 'User'}!`, 'success');
+      bootOS();
+    }
+  };
+
+  // Google Sign-In
   const handleGoogleSignIn = async () => {
     setAuthLoading(true);
     setAuthError(null);
@@ -297,18 +348,41 @@ export const BootScreen: React.FC = () => {
                 </div>
               </div>
             ) : (
-              /* Mode 2: Cloud Account Google Sign-In */
+              /* Mode 2: Cloud Account (In-App Credentials with Zero Popups) */
               <div className="space-y-4 pt-1">
-                <div className="text-center space-y-1 pb-1">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto mb-2">
-                    <Cloud size={24} />
+                {/* Sign In vs Sign Up Subtabs */}
+                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                  <div className="flex items-center gap-4 text-xs sm:text-sm">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCloudAuthMode('login');
+                        setAuthError(null);
+                      }}
+                      className={`font-semibold pb-1 transition-colors cursor-pointer border-b-2 ${
+                        cloudAuthMode === 'login'
+                          ? 'border-blue-500 text-white'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Sign In
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCloudAuthMode('signup');
+                        setAuthError(null);
+                      }}
+                      className={`font-semibold pb-1 transition-colors cursor-pointer border-b-2 ${
+                        cloudAuthMode === 'signup'
+                          ? 'border-blue-500 text-white'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Create Account
+                    </button>
                   </div>
-                  <h3 className="text-sm sm:text-base font-semibold text-slate-100">
-                    Cloud Account Workspace
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Sync your virtual files, desktop layout, and notes seamlessly across devices.
-                  </p>
+                  <span className="text-[11px] text-emerald-400 font-medium">In-App Secure</span>
                 </div>
 
                 {isUnauthorizedDomain ? (
@@ -320,7 +394,7 @@ export const BootScreen: React.FC = () => {
                           Domain Authorization Required
                         </div>
                         <p className="text-[11.5px] text-amber-300/90 mt-1 leading-relaxed">
-                          Cloud authentication requires adding your deployment domain to your <strong>Authorized domains</strong> list.
+                          Google Popup sign-in requires adding your domain to <strong>Authorized domains</strong>. Or use the In-App Email login below!
                         </p>
                       </div>
                     </div>
@@ -380,21 +454,110 @@ export const BootScreen: React.FC = () => {
                     </div>
                   </div>
                 ) : authError ? (
-                  <div className="p-3.5 rounded-2xl bg-rose-950/70 border border-rose-800 text-xs text-rose-200 space-y-1">
+                  <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-800 text-xs text-rose-200 space-y-1">
                     <div className="flex items-start gap-2">
-                      <AlertCircle size={16} className="shrink-0 mt-0.5 text-rose-400" />
-                      <div className="font-semibold text-rose-200">Authentication Notice</div>
+                      <AlertCircle size={15} className="shrink-0 mt-0.5 text-rose-400" />
+                      <div className="font-semibold text-rose-200">Notice</div>
                     </div>
-                    <p className="text-[12px] text-rose-300/90 pl-6">{authError}</p>
+                    <p className="text-[11.5px] text-rose-300/90 pl-5 leading-relaxed">{authError}</p>
                   </div>
                 ) : null}
 
-                <div className="pt-2">
+                {/* In-App Direct Login / Sign Up Form (NO POPUPS) */}
+                <form onSubmit={handleEmailAuth} className="space-y-3">
+                  {cloudAuthMode === 'signup' && (
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-300 block">
+                        Full Name
+                      </label>
+                      <div className="relative">
+                        <UserIcon size={14} className="absolute left-3.5 top-3 text-slate-500" />
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Alex Morgan"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          className="w-full bg-slate-950/90 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 select-text"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300 block">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail size={14} className="absolute left-3.5 top-3 text-slate-500" />
+                      <input
+                        type="email"
+                        required
+                        placeholder="user@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full bg-slate-950/90 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 select-text"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-300 block">
+                      Password
+                    </label>
+                    <div className="relative">
+                      <Lock size={14} className="absolute left-3.5 top-3 text-slate-500" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full bg-slate-950/90 border border-slate-800 rounded-xl pl-9 pr-9 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 select-text"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300 p-0.5 rounded cursor-pointer"
+                        title={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={authLoading}
+                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.99] cursor-pointer disabled:opacity-50"
+                  >
+                    <span>
+                      {authLoading
+                        ? 'Processing...'
+                        : cloudAuthMode === 'signup'
+                        ? 'Create Cloud Account'
+                        : 'Sign In to Cloud'}
+                    </span>
+                    <ArrowRight size={15} />
+                  </button>
+                </form>
+
+                {/* Divider */}
+                <div className="relative flex items-center justify-center my-3">
+                  <div className="border-t border-slate-800/80 w-full" />
+                  <span className="bg-slate-900 px-3 text-[11px] text-slate-500 uppercase tracking-wider shrink-0 font-medium">
+                    Or Sign In With
+                  </span>
+                  <div className="border-t border-slate-800/80 w-full" />
+                </div>
+
+                {/* Google Sign In Button */}
+                <div>
                   <button
                     type="button"
                     onClick={handleGoogleSignIn}
                     disabled={authLoading}
-                    className="w-full py-3 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-semibold text-xs sm:text-sm flex items-center justify-center gap-3 shadow-lg transition-transform active:scale-[0.99] cursor-pointer disabled:opacity-50"
+                    className="w-full py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-semibold text-xs sm:text-sm flex items-center justify-center gap-3 shadow-md transition-transform active:scale-[0.99] cursor-pointer disabled:opacity-50"
                   >
                     {/* Google SVG Logo */}
                     <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
@@ -415,7 +578,7 @@ export const BootScreen: React.FC = () => {
                         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                       />
                     </svg>
-                    <span>{authLoading ? 'Signing in with Google...' : 'Sign in with Google'}</span>
+                    <span>Continue with Google</span>
                   </button>
                 </div>
 

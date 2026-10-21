@@ -16,9 +16,11 @@ import {
   Cloud,
   LogOut,
   CheckCircle2,
+  ExternalLink,
 } from 'lucide-react';
 import { useOS } from '../../../context/OSContext';
 import { useAuth } from '../../../context/AuthContext';
+import { activeAuthDomain } from '../../../services/firebase';
 import { WALLPAPER_OPTIONS } from '../../../config/wallpapers';
 import { AccentColor, WallpaperId, WebOSBackup } from '../../../types/system';
 
@@ -66,6 +68,33 @@ export const SettingsApp: React.FC = () => {
     };
     reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDownloadOAuthLogo = () => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, 512, 512);
+        const pngUrl = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = pngUrl;
+        a.download = 'webos-logo-512x512.png';
+        a.click();
+        addNotification('Logo Exported', 'WebOS logo (512x512 PNG) downloaded for Google OAuth consent screen.', 'success');
+      }
+    };
+    img.onerror = () => {
+      const a = document.createElement('a');
+      a.href = '/favicon.svg';
+      a.download = 'webos-logo.svg';
+      a.click();
+    };
+    img.src = '/favicon.svg';
   };
 
   return (
@@ -577,12 +606,59 @@ export const SettingsApp: React.FC = () => {
         {activeTab === 'about' && (
           <div className="space-y-4 max-w-xl">
             <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
-              <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-lg">
-                W
+              <div className="w-12 h-12 rounded-xl overflow-hidden bg-blue-600 flex items-center justify-center shadow-lg border border-blue-400/30">
+                <img src="/favicon.svg" alt="WebOS Logo" className="w-full h-full object-cover" />
               </div>
-              <div>
+              <div className="flex-1">
                 <h3 className="text-base font-bold text-slate-100">WebOS Desktop Environment</h3>
-                <p className="text-xs text-slate-400">Version 1.0.0 (Production Release)</p>
+                <p className="text-xs text-slate-400">Production Release (Vercel Deployment)</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleDownloadOAuthLogo}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center gap-1.5 transition-colors cursor-pointer text-xs shrink-0 shadow-sm"
+                title="Download 512x512 PNG WebOS logo for Google Cloud OAuth Consent Screen"
+              >
+                <Download size={13} />
+                <span>Export OAuth Logo</span>
+              </button>
+            </div>
+
+            {/* OAuth Branding & Domain Integration Status */}
+            <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-xs text-slate-200">Google OAuth & Domain Settings</span>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+                  Webos Branding
+                </span>
+              </div>
+              <div className="space-y-1.5 text-[11.5px] text-slate-300">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>Application Name:</span>
+                  <span className="font-semibold text-slate-200">Webos</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>Production Website:</span>
+                  <a
+                    href="https://webos-green.vercel.app/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:underline flex items-center gap-1 font-mono text-[11px]"
+                  >
+                    <span>https://webos-green.vercel.app/</span>
+                    <ExternalLink size={11} />
+                  </a>
+                </div>
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>Current Auth Domain:</span>
+                  <span className="font-mono text-emerald-300 text-[11px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                    {activeAuthDomain}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>Vercel Auth Proxy:</span>
+                  <span className="text-emerald-400 font-medium">Configured in vercel.json (/__/auth/*)</span>
+                </div>
               </div>
             </div>
 
@@ -594,7 +670,7 @@ export const SettingsApp: React.FC = () => {
 
               <div className="p-3 rounded-lg bg-slate-950/50 border border-slate-800">
                 <div className="text-slate-500 text-[10px] uppercase font-semibold mb-1">Storage Mode</div>
-                <div className="text-slate-200 font-mono">HTML5 LocalStorage + Virtual FS</div>
+                <div className="text-slate-200 font-mono">Cloud Firestore + Local FS</div>
               </div>
 
               <div className="p-3 rounded-lg bg-slate-950/50 border border-slate-800">
@@ -603,13 +679,13 @@ export const SettingsApp: React.FC = () => {
               </div>
 
               <div className="p-3 rounded-lg bg-slate-950/50 border border-slate-800">
-                <div className="text-slate-500 text-[10px] uppercase font-semibold mb-1">Privacy Guarantee</div>
-                <div className="text-emerald-400 font-medium">100% Client-Side Isolated</div>
+                <div className="text-slate-500 text-[10px] uppercase font-semibold mb-1">Security Model</div>
+                <div className="text-emerald-400 font-medium">ABAC Multi-User Isolated</div>
               </div>
             </div>
 
             <p className="text-xs text-slate-400 pt-2 leading-relaxed">
-              WebOS delivers an authentic desktop operating system experience within modern browsers. All state is securely saved in your browser and will never be shared with external servers.
+              WebOS delivers an authentic desktop operating system experience within modern browsers. All workspace state is synchronized securely with your dedicated cloud workspace.
             </p>
           </div>
         )}

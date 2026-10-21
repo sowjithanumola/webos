@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/__/auth/(.*)",
+      "destination": "https://webos-ff50c.firebaseapp.com/__/auth/$1"
+    },
+    {
+      "source": "/__/firebase/(.*)",
+      "destination": "https://webos-ff50c.firebaseapp.com/__/firebase/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

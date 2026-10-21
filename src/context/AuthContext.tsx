@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import {
   User as FirebaseUser,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   signOut as fbSignOut,
   onAuthStateChanged,
 } from 'firebase/auth';
@@ -13,6 +16,8 @@ interface AuthContextType {
   loading: boolean;
   isGuest: boolean;
   cloudStatus: CloudSyncStatus;
+  signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null; user?: FirebaseUser }>;
+  signUpWithEmail: (email: string, password: string, fullName: string) => Promise<{ error: Error | null; user?: FirebaseUser }>;
   signInWithGoogle: () => Promise<{ error: Error | null; user?: FirebaseUser }>;
   signOut: () => Promise<void>;
   continueAsGuest: () => void;
@@ -92,7 +97,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (err) {
-      console.warn('Failed to sync files from Firebase Firestore:', err);
+      console.warn('Failed to sync files from cloud storage:', err);
+    }
+  };
+
+  // Sign In with Email & Password (Zero popups, 100% in-app)
+  const signInWithEmail = async (
+    email: string,
+    password: string
+  ): Promise<{ error: Error | null; user?: FirebaseUser }> => {
+    try {
+      const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+      setUser(result.user);
+      setIsGuest(false);
+      localStorage.removeItem('webos_auth_mode');
+      return { error: null, user: result.user };
+    } catch (error) {
+      console.error('Email Sign-in failed:', error);
+      return { error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  };
+
+  // Sign Up with Email & Password (Zero popups, 100% in-app)
+  const signUpWithEmail = async (
+    email: string,
+    password: string,
+    fullName: string
+  ): Promise<{ error: Error | null; user?: FirebaseUser }> => {
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      if (fullName.trim()) {
+        await updateProfile(result.user, {
+          displayName: fullName.trim(),
+        });
+      }
+      setUser(result.user);
+      setIsGuest(false);
+      localStorage.removeItem('webos_auth_mode');
+      return { error: null, user: result.user };
+    } catch (error) {
+      console.error('Email Sign-up failed:', error);
+      return { error: error instanceof Error ? error : new Error(String(error)) };
     }
   };
 
@@ -114,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await fbSignOut(auth);
     } catch (err) {
-      console.warn('Error signing out from Firebase:', err);
+      console.warn('Error signing out:', err);
     }
     setUser(null);
     setIsGuest(true);
@@ -140,6 +185,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         isGuest,
         cloudStatus,
+        signInWithEmail,
+        signUpWithEmail,
         signInWithGoogle,
         signOut,
         continueAsGuest,

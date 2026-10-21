@@ -20,8 +20,22 @@ import {
 import firebaseConfig from '../../firebase-applet-config.json';
 import { VirtualFile } from '../types/fs';
 
+// Custom authentication domain support:
+// Allows replacing 'webos-ff50c.firebaseapp.com' in the Google Sign-In popup with 'webos-green.vercel.app'
+// (via the Vercel reverse proxy rewrite in vercel.json) or a custom domain (e.g. auth.yourdomain.com).
+// Safely falls back to firebaseConfig.authDomain so existing sign-in never breaks if unset.
+const customAuthDomain =
+  typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN
+    ? String(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN).trim()
+    : '';
+
+export const activeAuthDomain = customAuthDomain || firebaseConfig.authDomain;
+
 // Initialize Firebase App
-const app = initializeApp(firebaseConfig);
+const app = initializeApp({
+  ...firebaseConfig,
+  authDomain: activeAuthDomain,
+});
 
 // CRITICAL: Must pass databaseId from config
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
