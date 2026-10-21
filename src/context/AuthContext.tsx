@@ -1,24 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { User, Session, AuthError } from '@supabase/supabase-js';
-import { supabase, cloudStorage, CloudSyncStatus } from '../services/supabase';
+import {
+  User as FirebaseUser,
+  signInWithPopup,
+  signOut as fbSignOut,
+  onAuthStateChanged,
+} from 'firebase/auth';
+import { auth, googleProvider, firebaseStorage, CloudSyncStatus } from '../services/firebase';
 import { fsService } from '../services/fsService';
 
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: FirebaseUser | null;
   loading: boolean;
   isGuest: boolean;
   cloudStatus: CloudSyncStatus;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
-  signUp: (
-    email: string,
-    password: string,
-    fullName: string
-  ) => Promise<{ error: AuthError | null; user: User | null; session: Session | null; needsEmailConfirmation: boolean }>;
+  signInWithGoogle: () => Promise<{ error: Error | null; user?: FirebaseUser }>;
   signOut: () => Promise<void>;
-  resendConfirmationEmail: (email: string) => Promise<{ error: AuthError | null }>;
-  updatePassword: (newPassword: string) => Promise<{ error: AuthError | null }>;
-  updateProfileName: (fullName: string) => Promise<{ error: AuthError | null }>;
   continueAsGuest: () => void;
   migrateGuestFilesToCloud: () => Promise<number>;
 }
@@ -26,40 +22,44 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isGuest, setIsGuest] = useState<boolean>(() => {
     return localStorage.getItem('webos_auth_mode') === 'guest';
   });
   const [cloudStatus, setCloudStatus] = useState<CloudSyncStatus>(() => {
-    return cloudStorage.getStatus();
+    return firebaseStorage.getStatus();
   });
 
   // Track initial auth state and subscription
   useEffect(() => {
     let mounted = true;
 
-    // Subscribe to cloudStorage status updates
-    const unsubscribeCloud = cloudStorage.subscribeStatus((status) => {
+    // Subscribe to firebaseStorage status updates
+    const unsubscribeCloud = firebaseStorage.subscribeStatus((status) => {
       if (mounted) {
         setCloudStatus(status);
       }
     });
 
-    // Get current active session
-    supabase.auth.getSession().then(({ data: { session: initialSession }, error }) => {
+    // Listen to Firebase Auth state changes
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (!mounted) return;
-      if (error) {
-        console.error('Supabase getSession error:', error);
-      }
 
-      if (initialSession?.user) {
-        setSession(initialSession);
-        setUser(initialSession.user);
+      if (currentUser) {
+        setUser(currentUser);
         setIsGuest(false);
         localStorage.removeItem('webos_auth_mode');
+
+        // Upsert user profile & sync cloud files
+        try {
+          await firebaseStorage.upsertUserProfile(currentUser);
+          await syncUserFilesFromCloud(currentUser.uid);
+        } catch (err) {
+          console.warn('Initial cloud sync error:', err);
+        }
       } else {
+        setUser(null);
         const storedMode = localStorage.getItem('webos_auth_mode');
         if (storedMode === 'guest') {
           setIsGuest(true);
@@ -68,45 +68,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    // Listen for auth state changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      if (!mounted) return;
-
-      if (currentSession?.user) {
-        setSession(currentSession);
-        setUser(currentSession.user);
-        setIsGuest(false);
-        localStorage.removeItem('webos_auth_mode');
-
-        // Sync files on sign in
-        if (event === 'SIGNED_IN') {
-          try {
-            await syncUserFilesFromCloud(currentSession.user.id);
-          } catch (err) {
-            console.error('Error syncing cloud files on sign-in:', err);
-          }
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setSession(null);
-        setUser(null);
-        setIsGuest(true);
-        localStorage.setItem('webos_auth_mode', 'guest');
-      }
-    });
-
     return () => {
       mounted = false;
       unsubscribeCloud();
-      subscription.unsubscribe();
+      unsubscribeAuth();
     };
   }, []);
 
-  // Sync files from Supabase down to local virtual filesystem
+  // Sync files from Firestore down to local virtual filesystem
   const syncUserFilesFromCloud = async (userId: string) => {
     try {
-      const filesMap = await cloudStorage.loadUserFiles(userId);
+      const filesMap = await firebaseStorage.loadUserFiles(userId);
       if (filesMap && Object.keys(filesMap).length > 0) {
         for (const file of Object.values(filesMap)) {
           try {
@@ -120,95 +92,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (err) {
-      console.error('Failed to sync files from cloud:', err);
+      console.warn('Failed to sync files from Firebase Firestore:', err);
     }
   };
 
-  // User Actions
-  const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-
-    if (!error && data.session) {
-      setSession(data.session);
-      setUser(data.user);
+  // Sign In with Google via Popup
+  const signInWithGoogle = async (): Promise<{ error: Error | null; user?: FirebaseUser }> => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      setUser(result.user);
       setIsGuest(false);
       localStorage.removeItem('webos_auth_mode');
+      return { error: null, user: result.user };
+    } catch (error) {
+      console.error('Google Sign-in failed:', error);
+      return { error: error instanceof Error ? error : new Error(String(error)) };
     }
-
-    return { error };
-  };
-
-  const signUp = async (email: string, password: string, fullName: string) => {
-    const cleanEmail = email.trim();
-    const { data, error } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password,
-      options: {
-        data: {
-          full_name: fullName.trim() || 'WebOS User',
-        },
-      },
-    });
-
-    if (error) {
-      return {
-        error,
-        user: null,
-        session: null,
-        needsEmailConfirmation: false,
-      };
-    }
-
-    const needsEmailConfirmation = Boolean(data.user && !data.session);
-
-    if (data.session && data.user) {
-      setSession(data.session);
-      setUser(data.user);
-      setIsGuest(false);
-      localStorage.removeItem('webos_auth_mode');
-    }
-
-    return {
-      error: null,
-      user: data.user,
-      session: data.session,
-      needsEmailConfirmation,
-    };
-  };
-
-  const resendConfirmationEmail = async (email: string) => {
-    const cleanEmail = email.trim();
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: cleanEmail,
-    });
-    return { error };
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await fbSignOut(auth);
+    } catch (err) {
+      console.warn('Error signing out from Firebase:', err);
+    }
     setUser(null);
-    setSession(null);
     setIsGuest(true);
     localStorage.setItem('webos_auth_mode', 'guest');
-  };
-
-  const updatePassword = async (newPassword: string) => {
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
-    return { error };
-  };
-
-  const updateProfileName = async (fullName: string) => {
-    if (!user) return { error: null };
-    const { error } = await supabase.auth.updateUser({
-      data: { full_name: fullName },
-    });
-    return { error };
   };
 
   const continueAsGuest = () => {
@@ -219,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const migrateGuestFilesToCloud = useCallback(async (): Promise<number> => {
     if (!user) return 0;
     const allNodes = fsService.getState().nodes;
-    const migrated = await cloudStorage.migrateLocalFilesToCloud(user.id, allNodes);
+    const migrated = await firebaseStorage.migrateLocalFilesToCloud(user.uid, allNodes);
     return migrated;
   }, [user]);
 
@@ -227,16 +137,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
-        session,
         loading,
         isGuest,
         cloudStatus,
-        signIn,
-        signUp,
+        signInWithGoogle,
         signOut,
-        resendConfirmationEmail,
-        updatePassword,
-        updateProfileName,
         continueAsGuest,
         migrateGuestFilesToCloud,
       }}

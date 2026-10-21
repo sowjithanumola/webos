@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net - Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Entity Validations
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['id', 'email', 'fullName', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['id', 'email', 'fullName', 'createdAt', 'updatedAt', 'avatarColor']) &&
+             data.id is string && isValidId(data.id) && data.id == request.auth.uid &&
+             data.email is string && data.email.size() <= 256 &&
+             data.fullName is string && data.fullName.size() <= 128 &&
+             data.createdAt is string && data.createdAt.size() <= 64 &&
+             data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
+    function isValidUserFile(data) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'type', 'path', 'parentId', 'size', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['id', 'userId', 'name', 'type', 'path', 'parentId', 'size', 'content', 'isSystem', 'createdAt', 'updatedAt', 'originalPath']) &&
+             data.id is string && isValidId(data.id) &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 256 &&
+             data.type is string && data.type.size() <= 32 &&
+             data.path is string && data.path.size() <= 1024 &&
+             data.parentId is string && data.parentId.size() <= 128 &&
+             data.size is number && data.size >= 0 &&
+             (!('content' in data) || (data.content is string && data.content.size() <= 524288)) &&
+             (!('isSystem' in data) || data.isSystem is bool) &&
+             data.createdAt is string && data.createdAt.size() <= 64 &&
+             data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
+    function isValidUserSettings(data) {
+      return data.keys().hasAll(['userId', 'wallpaper', 'theme', 'dockPosition', 'dockSize', 'nightLight', 'updatedAt']) &&
+             data.keys().hasOnly(['userId', 'wallpaper', 'theme', 'dockPosition', 'dockSize', 'nightLight', 'updatedAt']) &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.wallpaper is string && data.wallpaper.size() <= 64 &&
+             data.theme in ['dark', 'light', 'system'] &&
+             data.dockPosition in ['bottom', 'left', 'right'] &&
+             data.dockSize in ['sm', 'md', 'lg'] &&
+             data.nightLight is bool &&
+             data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
+    // User Profile Collection
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false; // Blanket user listing forbidden
+
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming()) &&
+                       incoming().id == existing().id &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+
+      // User Virtual Files Subcollection
+      match /files/{fileId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(fileId) &&
+                         isValidUserFile(incoming()) &&
+                         incoming().id == fileId;
+
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(fileId) &&
+                         isValidUserFile(incoming()) &&
+                         incoming().id == existing().id &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt;
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(fileId);
+      }
+
+      // User Settings Subcollection
+      match /settings/{settingId} {
+        allow get: if isOwner(userId) && isValidId(userId);
+        allow list: if false;
+
+        allow create, update: if isOwner(userId) && isValidId(userId) && isValidId(settingId) &&
+                                 isValidUserSettings(incoming());
+        allow delete: if false;
+      }
+    }
+  }
+}

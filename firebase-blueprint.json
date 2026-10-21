@@ -1,0 +1,158 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public profile and identity information for an authenticated WebOS user",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 256
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Display name of the user",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["id", "email", "fullName", "createdAt", "updatedAt"]
+    },
+    "UserFile": {
+      "title": "UserFile",
+      "description": "A virtual file or folder stored in the user's WebOS cloud filesystem",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the virtual file node",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user UID",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "File or folder name",
+          "maxLength": 256
+        },
+        "type": {
+          "type": "string",
+          "description": "Type of virtual file (text, markdown, code, folder, etc.)",
+          "maxLength": 32
+        },
+        "path": {
+          "type": "string",
+          "description": "Virtual path on filesystem",
+          "maxLength": 1024
+        },
+        "parentId": {
+          "type": "string",
+          "description": "Parent folder ID",
+          "maxLength": 128
+        },
+        "content": {
+          "type": "string",
+          "description": "Text content of the file",
+          "maxLength": 524288
+        },
+        "size": {
+          "type": "number",
+          "description": "File size in bytes"
+        },
+        "isSystem": {
+          "type": "boolean",
+          "description": "Whether file is a system entity"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["id", "userId", "name", "type", "path", "parentId", "size", "createdAt", "updatedAt"]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "Desktop environment preferences and configuration for the user",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner user UID",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "wallpaper": {
+          "type": "string",
+          "description": "Active wallpaper ID",
+          "maxLength": 64
+        },
+        "theme": {
+          "type": "string",
+          "description": "Theme mode",
+          "enum": ["dark", "light", "system"]
+        },
+        "dockPosition": {
+          "type": "string",
+          "description": "Dock placement",
+          "enum": ["bottom", "left", "right"]
+        },
+        "dockSize": {
+          "type": "string",
+          "description": "Dock icon size",
+          "enum": ["sm", "md", "lg"]
+        },
+        "nightLight": {
+          "type": "boolean",
+          "description": "Night light warm filter enabled"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["userId", "wallpaper", "theme", "dockPosition", "dockSize", "nightLight", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document storing basic authenticated account information"
+    },
+    "/users/{userId}/files/{fileId}": {
+      "schema": "UserFile",
+      "description": "Cloud-synchronized virtual filesystem nodes owned by the user"
+    },
+    "/users/{userId}/settings/system": {
+      "schema": "UserSettings",
+      "description": "Cloud-synchronized desktop preferences owned by the user"
+    }
+  }
+}

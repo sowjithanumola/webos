@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { useOS } from '../../../context/OSContext';
 import { useAuth } from '../../../context/AuthContext';
-import { SUPABASE_PROJECT_URL } from '../../../services/supabase';
 import { WALLPAPER_OPTIONS } from '../../../config/wallpapers';
 import { AccentColor, WallpaperId, WebOSBackup } from '../../../types/system';
 
@@ -32,14 +31,9 @@ export const SettingsApp: React.FC = () => {
     importBackup,
     addNotification,
   } = useOS();
-  const { user, signOut, migrateGuestFilesToCloud, updateProfileName, updatePassword } = useAuth();
+  const { user, signOut, migrateGuestFilesToCloud, signInWithGoogle } = useAuth();
   const [migrating, setMigrating] = useState<boolean>(false);
-  const [fullNameInput, setFullNameInput] = useState<string>(user?.user_metadata?.full_name || '');
-  const [updatingName, setUpdatingName] = useState<boolean>(false);
-  const [settingsNewPassword, setSettingsNewPassword] = useState<string>('');
-  const [settingsConfirmPassword, setSettingsConfirmPassword] = useState<string>('');
-  const [updatingPassword, setUpdatingPassword] = useState<boolean>(false);
-  const [showSettingsPassword, setShowSettingsPassword] = useState<boolean>(false);
+  const [signingIn, setSigningIn] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<'appearance' | 'dock' | 'system' | 'cloud' | 'backup' | 'about'>('appearance');
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
@@ -428,149 +422,51 @@ export const SettingsApp: React.FC = () => {
         {activeTab === 'cloud' && (
           <div className="space-y-6 max-w-xl">
             <div>
-              <h3 className="text-sm font-semibold text-slate-100 mb-1">Cloud Workspace & Storage</h3>
+              <h3 className="text-sm font-semibold text-slate-100 mb-1">Firebase Cloud Workspace & Storage</h3>
               <p className="text-slate-400 text-xs mb-3">
-                Synchronize files, documents, and code across devices via Cloud PostgreSQL and Auth.
+                Synchronize files, documents, and code across devices via Google Cloud Firestore.
               </p>
 
               {user ? (
                 <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                        <Cloud size={20} />
-                      </div>
+                      {user.photoURL ? (
+                        <img
+                          src={user.photoURL}
+                          alt={user.displayName || 'User'}
+                          className="w-10 h-10 rounded-full border border-emerald-400/40"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold">
+                          {(user.displayName || user.email || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
                       <div>
-                        <div className="font-semibold text-slate-200">{user.email}</div>
+                        <div className="font-semibold text-slate-200">
+                          {user.displayName || user.email}
+                        </div>
                         <div className="text-[11px] text-emerald-400 flex items-center gap-1">
                           <CheckCircle2 size={12} />
-                          <span>Connected & Row-Level Security Enforced</span>
+                          <span>Connected to Firebase (webos-ff50c)</span>
                         </div>
                       </div>
                     </div>
 
                     <button
                       onClick={signOut}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 hover:text-rose-300 text-slate-300 transition-colors flex items-center gap-1.5"
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 hover:text-rose-300 text-slate-300 transition-colors flex items-center gap-1.5 cursor-pointer text-xs"
                     >
                       <LogOut size={13} />
                       <span>Sign Out</span>
                     </button>
                   </div>
 
-                  {/* Profile Name Management */}
-                  <div className="pt-3 border-t border-slate-800/80 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-slate-300">
-                        Profile Full Name
-                      </label>
-                      <span className="text-[11px] text-slate-500">
-                        {user.user_metadata?.full_name ? 'Name configured' : 'No name set yet'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={fullNameInput}
-                        onChange={(e) => setFullNameInput(e.target.value)}
-                        placeholder="e.g. Alex Morgan"
-                        className="flex-1 bg-slate-900 border border-slate-750 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                      />
-                      <button
-                        onClick={async () => {
-                          if (!fullNameInput.trim()) return;
-                          setUpdatingName(true);
-                          const { error } = await updateProfileName(fullNameInput.trim());
-                          setUpdatingName(false);
-                          if (error) {
-                            addNotification('Update Failed', error.message, 'error');
-                          } else {
-                            updateSettings({
-                              profile: {
-                                ...settings.profile,
-                                name: fullNameInput.trim(),
-                              },
-                            });
-                            addNotification('Profile Saved', 'Full name updated successfully.', 'success');
-                          }
-                        }}
-                        disabled={updatingName || !fullNameInput.trim()}
-                        className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium text-xs transition-colors shrink-0 cursor-pointer"
-                      >
-                        {updatingName ? 'Saving...' : 'Save Name'}
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      Your full name is synchronized to your cloud user metadata and profiles table.
-                    </p>
-                  </div>
-
-                  {/* Change Cloud Password */}
-                  <div className="pt-3 border-t border-slate-800/80 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-slate-300">
-                        Change Cloud Password
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => setShowSettingsPassword(!showSettingsPassword)}
-                        className="text-[11px] text-blue-400 hover:text-blue-300 transition-colors"
-                      >
-                        {showSettingsPassword ? 'Hide password' : 'Show password'}
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <input
-                        type={showSettingsPassword ? 'text' : 'password'}
-                        value={settingsNewPassword}
-                        onChange={(e) => setSettingsNewPassword(e.target.value)}
-                        placeholder="New Password (min 6 chars)"
-                        className="bg-slate-900 border border-slate-750 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                      />
-                      <input
-                        type={showSettingsPassword ? 'text' : 'password'}
-                        value={settingsConfirmPassword}
-                        onChange={(e) => setSettingsConfirmPassword(e.target.value)}
-                        placeholder="Confirm New Password"
-                        className="bg-slate-900 border border-slate-750 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (settingsNewPassword.length < 6) {
-                            addNotification('Password Error', 'Password must be at least 6 characters long.', 'error');
-                            return;
-                          }
-                          if (settingsNewPassword !== settingsConfirmPassword) {
-                            addNotification('Password Error', 'Passwords do not match.', 'error');
-                            return;
-                          }
-                          setUpdatingPassword(true);
-                          const { error } = await updatePassword(settingsNewPassword);
-                          setUpdatingPassword(false);
-                          if (error) {
-                            addNotification('Failed to Update', error.message, 'error');
-                          } else {
-                            setSettingsNewPassword('');
-                            setSettingsConfirmPassword('');
-                            addNotification('Password Updated', 'Your cloud password was successfully changed.', 'success');
-                          }
-                        }}
-                        disabled={updatingPassword || !settingsNewPassword}
-                        className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium text-xs transition-colors cursor-pointer"
-                      >
-                        {updatingPassword ? 'Updating...' : 'Update Password'}
-                      </button>
-                    </div>
-                  </div>
-
                   <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
                     <div>
-                      <div className="font-medium text-slate-300">Migrate Local Files to Cloud</div>
+                      <div className="font-medium text-slate-300 text-xs">Sync Local Files to Firebase</div>
                       <div className="text-[11px] text-slate-500">
-                        Uploads all current local documents and code to your cloud storage account.
+                        Uploads all current local documents and code to your Firebase Firestore cloud storage.
                       </div>
                     </div>
                     <button
@@ -578,10 +474,10 @@ export const SettingsApp: React.FC = () => {
                         setMigrating(true);
                         const count = await migrateGuestFilesToCloud();
                         setMigrating(false);
-                        addNotification('Migration Complete', `Synced ${count} files to your cloud account.`, 'success');
+                        addNotification('Migration Complete', `Synced ${count} files to Firebase Firestore.`, 'success');
                       }}
                       disabled={migrating}
-                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium transition-colors"
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium transition-colors text-xs cursor-pointer shrink-0"
                     >
                       {migrating ? 'Syncing...' : 'Sync Now'}
                     </button>
@@ -589,15 +485,33 @@ export const SettingsApp: React.FC = () => {
                 </div>
               ) : (
                 <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
-                  <div className="flex items-center gap-2 text-slate-300 font-semibold">
+                  <div className="flex items-center gap-2 text-slate-300 font-semibold text-xs sm:text-sm">
                     <Cloud size={16} className="text-slate-400" />
                     <span>Operating in Local Guest Mode</span>
                   </div>
                   <p className="text-slate-400 text-xs leading-relaxed">
-                    You are currently using isolated browser local storage. Sign in on the WebOS boot screen to link your files to your cloud account.
+                    You are currently using isolated browser local storage. Connect with your Google account to sync files to Firebase Cloud.
                   </p>
+                  <div className="pt-1">
+                    <button
+                      onClick={async () => {
+                        setSigningIn(true);
+                        const { error } = await signInWithGoogle();
+                        setSigningIn(false);
+                        if (error) {
+                          addNotification('Sign In Failed', error.message, 'error');
+                        } else {
+                          addNotification('Connected', 'Signed in with Google successfully.', 'success');
+                        }
+                      }}
+                      disabled={signingIn}
+                      className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-semibold text-xs flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <span>{signingIn ? 'Connecting...' : 'Connect with Google'}</span>
+                    </button>
+                  </div>
                   <div className="text-[11px] text-slate-500 font-mono">
-                    Cloud Storage Target: {SUPABASE_PROJECT_URL}
+                    Firebase Project ID: webos-ff50c
                   </div>
                 </div>
               )}

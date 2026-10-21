@@ -1,18 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowRight,
-  User as UserIcon,
   ShieldCheck,
-  Lock,
-  Mail,
-  Eye,
-  EyeOff,
   LogOut,
   CheckCircle2,
   AlertCircle,
-  MailCheck,
-  Send,
-  Sparkles,
+  Cloud,
 } from 'lucide-react';
 import { useOS } from '../../context/OSContext';
 import { useAuth } from '../../context/AuthContext';
@@ -21,35 +14,20 @@ export const BootScreen: React.FC = () => {
   const { bootOS, settings, updateSettings, addNotification } = useOS();
   const {
     user,
-    signIn,
-    signUp,
+    signInWithGoogle,
     signOut,
-    resendConfirmationEmail,
     continueAsGuest,
     migrateGuestFilesToCloud,
   } = useAuth();
 
-  const [authTab, setAuthTab] = useState<'guest' | 'login' | 'signup' | 'confirm-email'>('guest');
+  const [authTab, setAuthTab] = useState<'guest' | 'cloud'>('guest');
 
   // Guest profile state
   const [profileName, setProfileName] = useState<string>(settings.profile.name || 'Administrator');
   const [avatarColor, setAvatarColor] = useState<string>(settings.profile.avatarColor || '#38bdf8');
 
-  // Cloud credentials state
-  const [fullName, setFullName] = useState<string>('');
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [confirmPassword, setConfirmPassword] = useState<string>('');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
-
-  // Email confirmation state
-  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState<string>('');
-  const [resendStatus, setResendStatus] = useState<string | null>(null);
-
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [authSuccess, setAuthSuccess] = useState<string | null>(null);
 
   const [timeStr, setTimeStr] = useState<string>('');
   const [dateStr, setDateStr] = useState<string>('');
@@ -75,9 +53,10 @@ export const BootScreen: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Update OS profile when user signs in
   useEffect(() => {
     if (user) {
-      const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'User';
+      const name = user.displayName || user.email?.split('@')[0] || 'User';
       updateSettings({
         profile: {
           ...settings.profile,
@@ -99,98 +78,24 @@ export const BootScreen: React.FC = () => {
     bootOS();
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim() || !password) {
-      setAuthError('Please enter both your email and password.');
-      return;
-    }
-
+  const handleGoogleSignIn = async () => {
     setAuthLoading(true);
     setAuthError(null);
-    setAuthSuccess(null);
 
-    const { error } = await signIn(email.trim(), password);
+    const { error, user: signedInUser } = await signInWithGoogle();
     setAuthLoading(false);
 
     if (error) {
-      if (
-        error.message?.toLowerCase().includes('email not confirmed') ||
-        (error as any)?.code === 'email_not_confirmed'
-      ) {
-        setPendingConfirmationEmail(email.trim());
-        setAuthError('Email not confirmed yet. Please verify your email via the link sent to your inbox.');
-      } else {
-        setAuthError(error.message);
-      }
-    } else {
-      setAuthSuccess('Signed in successfully! Loading desktop...');
-      setTimeout(() => {
-        bootOS();
-      }, 500);
-    }
-  };
-
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanName = fullName.trim();
-    const cleanEmail = email.trim();
-
-    if (!cleanName || cleanName.length < 2) {
-      setAuthError('Please enter your full name (at least 2 characters).');
-      return;
-    }
-    if (!cleanEmail) {
-      setAuthError('Please enter a valid email address.');
-      return;
-    }
-    if (password.length < 6) {
-      setAuthError('Password must be at least 6 characters long.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setAuthError('Passwords do not match. Please re-enter.');
-      return;
-    }
-
-    setAuthLoading(true);
-    setAuthError(null);
-    setAuthSuccess(null);
-
-    const { error, needsEmailConfirmation } = await signUp(cleanEmail, password, cleanName);
-    setAuthLoading(false);
-
-    if (error) {
-      setAuthError(error.message);
-    } else if (needsEmailConfirmation) {
-      // Transition to confirmation screen
-      setPendingConfirmationEmail(cleanEmail);
-      setAuthTab('confirm-email');
-      addNotification('Confirmation Required', `Verification email sent to ${cleanEmail}`, 'info');
-    } else {
+      setAuthError(error.message || 'Google sign in was cancelled or failed.');
+    } else if (signedInUser) {
       updateSettings({
         profile: {
           ...settings.profile,
-          name: cleanName,
+          name: signedInUser.displayName || 'Google User',
         },
       });
-      setAuthSuccess('Account created successfully! Welcome to WebOS.');
-      setTimeout(() => {
-        bootOS();
-      }, 700);
-    }
-  };
-
-  const handleResendConfirmation = async () => {
-    if (!pendingConfirmationEmail) return;
-    setAuthLoading(true);
-    setResendStatus(null);
-    const { error } = await resendConfirmationEmail(pendingConfirmationEmail);
-    setAuthLoading(false);
-    if (error) {
-      setResendStatus(`Failed to resend: ${error.message}`);
-    } else {
-      setResendStatus('A fresh confirmation link has been sent to your inbox!');
+      addNotification('Signed In', `Welcome back, ${signedInUser.displayName || 'User'}!`, 'success');
+      bootOS();
     }
   };
 
@@ -198,15 +103,8 @@ export const BootScreen: React.FC = () => {
     setAuthLoading(true);
     const count = await migrateGuestFilesToCloud();
     setAuthLoading(false);
-    addNotification('Cloud Migration', `Migrated ${count} local files to cloud account.`, 'success');
+    addNotification('Firebase Cloud Sync', `Migrated ${count} local files to Firebase Firestore.`, 'success');
     bootOS();
-  };
-
-  const switchTab = (tab: typeof authTab) => {
-    setAuthTab(tab);
-    setAuthError(null);
-    setAuthSuccess(null);
-    setResendStatus(null);
   };
 
   return (
@@ -228,22 +126,30 @@ export const BootScreen: React.FC = () => {
       </div>
 
       {/* Main Authentication & Profile Box */}
-      <div className="w-full max-w-md sm:max-w-lg lg:max-w-xl rounded-3xl bg-slate-900/95 backdrop-blur-2xl border border-slate-800/90 p-6 sm:p-8 shadow-2xl shadow-black/80 space-y-5 my-4 max-h-[88vh] overflow-y-auto">
+      <div className="w-full max-w-md sm:max-w-lg rounded-3xl bg-slate-900/95 backdrop-blur-2xl border border-slate-800/90 p-6 sm:p-8 shadow-2xl shadow-black/80 space-y-5 my-4">
         {user ? (
           <div className="space-y-5 text-center">
             <div className="flex flex-col items-center gap-2.5">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 border-2 border-emerald-400/40 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-emerald-950">
-                {(user.user_metadata?.full_name || user.email || 'U')[0].toUpperCase()}
-              </div>
+              {user.photoURL ? (
+                <img
+                  src={user.photoURL}
+                  alt={user.displayName || 'Profile'}
+                  className="w-16 h-16 rounded-full border-2 border-emerald-400/40 shadow-lg"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 border-2 border-emerald-400/40 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-emerald-950">
+                  {(user.displayName || user.email || 'U')[0].toUpperCase()}
+                </div>
+              )}
               <div className="space-y-0.5">
                 <h3 className="font-bold text-base sm:text-lg text-slate-100">
-                  Welcome back, {user.user_metadata?.full_name || user.email?.split('@')[0]}!
+                  Welcome back, {user.displayName || user.email?.split('@')[0]}!
                 </h3>
                 <div className="text-xs text-slate-400 font-mono">{user.email}</div>
                 <div className="pt-1">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    Connected to Cloud Account
+                    Connected to Firebase (webos-ff50c)
                   </span>
                 </div>
               </div>
@@ -281,7 +187,10 @@ export const BootScreen: React.FC = () => {
             <div className="grid grid-cols-2 gap-1.5 bg-slate-950/80 p-1.5 rounded-2xl border border-slate-800 text-xs sm:text-sm">
               <button
                 type="button"
-                onClick={() => switchTab('guest')}
+                onClick={() => {
+                  setAuthTab('guest');
+                  setAuthError(null);
+                }}
                 className={`py-2 rounded-xl font-medium transition-colors cursor-pointer ${
                   authTab === 'guest'
                     ? 'bg-slate-800 text-slate-100 shadow-sm'
@@ -292,14 +201,17 @@ export const BootScreen: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => switchTab('login')}
+                onClick={() => {
+                  setAuthTab('cloud');
+                  setAuthError(null);
+                }}
                 className={`py-2 rounded-xl font-medium transition-colors cursor-pointer ${
-                  authTab !== 'guest'
+                  authTab === 'cloud'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Cloud Account
+                Firebase Cloud
               </button>
             </div>
 
@@ -315,7 +227,7 @@ export const BootScreen: React.FC = () => {
                   </div>
                   <div className="flex-1">
                     <label className="text-xs font-semibold text-slate-300 block mb-1">
-                      Guest Username
+                      Guest Profile Name
                     </label>
                     <input
                       type="text"
@@ -364,249 +276,65 @@ export const BootScreen: React.FC = () => {
                   <span>Isolated offline browser storage</span>
                 </div>
               </div>
-            ) : authTab === 'confirm-email' ? (
-              /* Mode 2: Confirm Email Prompt after Sign Up */
-              <div className="space-y-5 pt-1 text-center">
-                <div className="w-16 h-16 mx-auto rounded-3xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shadow-xl shadow-blue-500/10">
-                  <MailCheck size={32} />
-                </div>
-
-                <div className="space-y-1.5">
-                  <h2 className="text-lg font-bold text-slate-100">Confirm Your Email Address</h2>
-                  <p className="text-xs sm:text-sm text-slate-400">
-                    We've sent a verification link to:
+            ) : (
+              /* Mode 2: Firebase Cloud Google Sign-In */
+              <div className="space-y-4 pt-1">
+                <div className="text-center space-y-1 pb-1">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto mb-2">
+                    <Cloud size={24} />
+                  </div>
+                  <h3 className="text-sm sm:text-base font-semibold text-slate-100">
+                    Firebase Cloud Workspace
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Sync your virtual files, desktop layout, and notes seamlessly with Google Cloud Firestore.
                   </p>
-                  <div className="inline-block px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-blue-300 font-medium">
-                    {pendingConfirmationEmail || email}
-                  </div>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-left text-xs text-slate-300 space-y-2.5">
-                  <div className="font-semibold text-slate-200 flex items-center gap-2">
-                    <Sparkles size={14} className="text-blue-400" />
-                    <span>Next steps to activate your cloud account:</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1.5 text-slate-400 text-[12px] leading-relaxed">
-                    <li>Open your email inbox (and check your <strong>Spam</strong> or <strong>Promotions</strong> folder).</li>
-                    <li>Click the <strong>Confirm your mail</strong> link inside the email.</li>
-                    <li>Once confirmed, click the button below to sign in!</li>
-                  </ol>
-                </div>
-
-                {resendStatus && (
-                  <div className={`p-3 rounded-xl border text-xs text-left ${
-                    resendStatus.includes('Failed')
-                      ? 'bg-rose-950/70 border-rose-800 text-rose-200'
-                      : 'bg-emerald-950/70 border-emerald-800 text-emerald-200'
-                  }`}>
-                    {resendStatus}
+                {authError && (
+                  <div className="p-3.5 rounded-2xl bg-rose-950/70 border border-rose-800 text-xs text-rose-200 space-y-1">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle size={16} className="shrink-0 mt-0.5 text-rose-400" />
+                      <div className="font-semibold text-rose-200">Authentication Notice</div>
+                    </div>
+                    <p className="text-[12px] text-rose-300/90 pl-6">{authError}</p>
                   </div>
                 )}
 
-                <div className="space-y-2.5 pt-1">
+                <div className="pt-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setEmail(pendingConfirmationEmail || email);
-                      switchTab('login');
-                    }}
-                    className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.99] cursor-pointer"
-                  >
-                    <span>I've Confirmed, Go to Sign In</span>
-                    <ArrowRight size={16} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleResendConfirmation}
+                    onClick={handleGoogleSignIn}
                     disabled={authLoading}
-                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs sm:text-sm font-medium transition-colors cursor-pointer flex items-center justify-center gap-2"
+                    className="w-full py-3 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-semibold text-xs sm:text-sm flex items-center justify-center gap-3 shadow-lg transition-transform active:scale-[0.99] cursor-pointer disabled:opacity-50"
                   >
-                    <Send size={14} />
-                    <span>{authLoading ? 'Resending Link...' : 'Resend Confirmation Email'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleStartGuest}
-                    className="w-full py-2 text-slate-400 hover:text-slate-200 text-xs transition-colors cursor-pointer"
-                  >
-                    Explore as Local Guest for now
+                    {/* Google SVG Logo */}
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                      />
+                    </svg>
+                    <span>{authLoading ? 'Signing in with Google...' : 'Sign in with Google'}</span>
                   </button>
                 </div>
-              </div>
-            ) : (
-              /* Mode 3: Cloud Login & Sign Up Forms (No Forgot Password) */
-              <div className="space-y-4 pt-1">
-                <div className="flex items-center justify-between pb-1 border-b border-slate-800/80">
-                  <h2 className="text-sm sm:text-base font-semibold text-slate-100">
-                    {authTab === 'login' ? 'Sign In to Cloud' : 'Create New Cloud Account'}
-                  </h2>
-                  <span className="text-[11px] text-slate-400">
-                    {authTab === 'login' ? 'Cloud Workspace' : 'Free Account'}
-                  </span>
+
+                <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 pt-1">
+                  <CheckCircle2 size={13} className="text-emerald-400" />
+                  <span>Configured with Firebase Project: webos-ff50c</span>
                 </div>
-
-                <form
-                  onSubmit={authTab === 'login' ? handleLogin : handleSignUp}
-                  className="space-y-3.5"
-                >
-                  {authTab === 'signup' && (
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-300 block">
-                        Full Name <span className="text-rose-400">*</span>
-                      </label>
-                      <div className="relative">
-                        <UserIcon size={15} className="absolute left-3.5 top-3 text-slate-500" />
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. Alex Morgan"
-                          value={fullName}
-                          onChange={(e) => setFullName(e.target.value)}
-                          className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-3 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 select-text"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300 block">
-                      Email Address <span className="text-rose-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <Mail size={15} className="absolute left-3.5 top-3 text-slate-500" />
-                      <input
-                        type="email"
-                        required
-                        placeholder="user@example.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-3 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 select-text"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-300 block">
-                      Password <span className="text-rose-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <Lock size={15} className="absolute left-3.5 top-3 text-slate-500" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        placeholder={authTab === 'signup' ? 'At least 6 characters' : '••••••••'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 select-text"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
-                        title={showPassword ? 'Hide password' : 'Show password'}
-                      >
-                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {authTab === 'signup' && (
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-slate-300 block">
-                        Confirm Password <span className="text-rose-400">*</span>
-                      </label>
-                      <div className="relative">
-                        <Lock size={15} className="absolute left-3.5 top-3 text-slate-500" />
-                        <input
-                          type={showConfirmPassword ? 'text' : 'password'}
-                          required
-                          placeholder="Re-enter your password"
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 select-text"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 p-0.5 rounded transition-colors"
-                          title={showConfirmPassword ? 'Hide password' : 'Show password'}
-                        >
-                          {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {authError && (
-                    <div className="p-3.5 rounded-2xl bg-rose-950/70 border border-rose-800 text-xs text-rose-200 space-y-2">
-                      <div className="flex items-start gap-2">
-                        <AlertCircle size={16} className="shrink-0 mt-0.5 text-rose-400" />
-                        <div className="font-semibold text-rose-200">Authentication Notice</div>
-                      </div>
-                      <p className="text-[12px] text-rose-300/90 leading-relaxed pl-6">
-                        {authError}
-                      </p>
-                      {authError.toLowerCase().includes('not confirmed') && (
-                        <div className="pl-6 pt-1">
-                          <button
-                            type="button"
-                            onClick={handleResendConfirmation}
-                            className="px-3 py-1.5 rounded-lg bg-rose-900/60 hover:bg-rose-800 text-white font-medium text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <Send size={12} />
-                            <span>Resend Confirmation Email</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {authSuccess && (
-                    <div className="p-3.5 rounded-2xl bg-emerald-950/70 border border-emerald-800 text-xs text-emerald-200 flex items-start gap-2">
-                      <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-400" />
-                      <span className="font-semibold text-emerald-300">{authSuccess}</span>
-                    </div>
-                  )}
-
-                  <div className="pt-2">
-                    <button
-                      type="submit"
-                      disabled={authLoading}
-                      className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-transform active:scale-[0.99] cursor-pointer"
-                    >
-                      <span>
-                        {authLoading
-                          ? 'Processing...'
-                          : authTab === 'login'
-                          ? 'Sign In to Cloud'
-                          : 'Create Cloud Account'}
-                      </span>
-                      <ArrowRight size={15} />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-center text-xs text-slate-400 pt-2 border-t border-slate-800/80">
-                    {authTab === 'login' ? (
-                      <button
-                        type="button"
-                        onClick={() => switchTab('signup')}
-                        className="hover:text-blue-400 transition-colors cursor-pointer"
-                      >
-                        Need an account? <span className="text-blue-400 underline">Sign up</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => switchTab('login')}
-                        className="hover:text-blue-400 transition-colors cursor-pointer"
-                      >
-                        Already have an account? <span className="text-blue-400 underline">Sign in</span>
-                      </button>
-                    )}
-                  </div>
-                </form>
               </div>
             )}
           </>
@@ -614,8 +342,8 @@ export const BootScreen: React.FC = () => {
       </div>
 
       {/* Footer Info */}
-      <div className="text-xs text-slate-500 mb-2">
-        WebOS v1.1.0 · Cloud Sync Active
+      <div className="text-center text-xs text-slate-500 pb-2">
+        <p>WebOS &bull; Zero external trackers &bull; Client-side sandboxed &bull; Firebase Firestore Cloud</p>
       </div>
     </div>
   );
