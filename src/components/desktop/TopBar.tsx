@@ -185,19 +185,19 @@ export const TopBar: React.FC = () => {
 
         {/* Right: Clock & Quick Settings */}
         <div className="flex items-center gap-1.5">
-          {/* Firebase Cloud Status Indicator */}
+          {/* Cloud Status Indicator */}
           <button
             onClick={() => openWindow('settings')}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/10 transition-colors text-[11px]"
             title={
               user
-                ? `Firebase Connected: ${user.displayName || user.email}`
+                ? `Cloud Account: ${user.displayName || user.email}`
                 : 'Local Guest Mode (Click to manage Cloud)'
             }
           >
             <Cloud size={13} className={user ? 'text-emerald-400' : 'text-slate-500'} />
             <span className="hidden lg:inline text-slate-300 text-[10px] max-w-[120px] truncate">
-              {user ? (user.displayName || user.email?.split('@')[0] || 'Firebase') : 'Guest'}
+              {user ? (user.displayName || user.email?.split('@')[0] || 'Cloud') : 'Guest'}
             </span>
           </button>
 

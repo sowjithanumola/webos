@@ -422,9 +422,9 @@ export const SettingsApp: React.FC = () => {
         {activeTab === 'cloud' && (
           <div className="space-y-6 max-w-xl">
             <div>
-              <h3 className="text-sm font-semibold text-slate-100 mb-1">Firebase Cloud Workspace & Storage</h3>
+              <h3 className="text-sm font-semibold text-slate-100 mb-1">Cloud Account & Storage</h3>
               <p className="text-slate-400 text-xs mb-3">
-                Synchronize files, documents, and code across devices via Google Cloud Firestore.
+                Synchronize files, documents, and code across devices securely in the cloud.
               </p>
 
               {user ? (
@@ -448,7 +448,7 @@ export const SettingsApp: React.FC = () => {
                         </div>
                         <div className="text-[11px] text-emerald-400 flex items-center gap-1">
                           <CheckCircle2 size={12} />
-                          <span>Connected to Firebase (webos-ff50c)</span>
+                          <span>Cloud Account Connected</span>
                         </div>
                       </div>
                     </div>
@@ -464,9 +464,9 @@ export const SettingsApp: React.FC = () => {
 
                   <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
                     <div>
-                      <div className="font-medium text-slate-300 text-xs">Sync Local Files to Firebase</div>
+                      <div className="font-medium text-slate-300 text-xs">Sync Local Files to Cloud</div>
                       <div className="text-[11px] text-slate-500">
-                        Uploads all current local documents and code to your Firebase Firestore cloud storage.
+                        Uploads all current local documents and code to your cloud storage workspace.
                       </div>
                     </div>
                     <button
@@ -474,7 +474,7 @@ export const SettingsApp: React.FC = () => {
                         setMigrating(true);
                         const count = await migrateGuestFilesToCloud();
                         setMigrating(false);
-                        addNotification('Migration Complete', `Synced ${count} files to Firebase Firestore.`, 'success');
+                        addNotification('Migration Complete', `Synced ${count} files to your cloud storage.`, 'success');
                       }}
                       disabled={migrating}
                       className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium transition-colors text-xs cursor-pointer shrink-0"
@@ -490,7 +490,7 @@ export const SettingsApp: React.FC = () => {
                     <span>Operating in Local Guest Mode</span>
                   </div>
                   <p className="text-slate-400 text-xs leading-relaxed">
-                    You are currently using isolated browser local storage. Connect with your Google account to sync files to Firebase Cloud.
+                    You are currently using isolated browser local storage. Connect with your Google account to sync files to your cloud account.
                   </p>
                   <div className="pt-1">
                     <button
@@ -511,7 +511,7 @@ export const SettingsApp: React.FC = () => {
                     </button>
                   </div>
                   <div className="text-[11px] text-slate-500 font-mono">
-                    Firebase Project ID: webos-ff50c
+                    Cloud Storage: Active & Encrypted
                   </div>
                 </div>
               )}

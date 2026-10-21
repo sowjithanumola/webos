@@ -6,6 +6,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Cloud,
+  Copy,
+  Check,
+  ExternalLink,
 } from 'lucide-react';
 import { useOS } from '../../context/OSContext';
 import { useAuth } from '../../context/AuthContext';
@@ -28,6 +31,23 @@ export const BootScreen: React.FC = () => {
 
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState<boolean>(false);
+
+  const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
+
+  const handleCopyDomain = () => {
+    if (currentDomain) {
+      navigator.clipboard.writeText(currentDomain);
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 2500);
+    }
+  };
+
+  const isUnauthorizedDomain = Boolean(
+    authError &&
+      (authError.includes('unauthorized-domain') ||
+        authError.includes('auth/unauthorized-domain'))
+  );
 
   const [timeStr, setTimeStr] = useState<string>('');
   const [dateStr, setDateStr] = useState<string>('');
@@ -103,7 +123,7 @@ export const BootScreen: React.FC = () => {
     setAuthLoading(true);
     const count = await migrateGuestFilesToCloud();
     setAuthLoading(false);
-    addNotification('Firebase Cloud Sync', `Migrated ${count} local files to Firebase Firestore.`, 'success');
+    addNotification('Cloud Sync', `Migrated ${count} local files to your cloud account.`, 'success');
     bootOS();
   };
 
@@ -149,7 +169,7 @@ export const BootScreen: React.FC = () => {
                 <div className="pt-1">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    Connected to Firebase (webos-ff50c)
+                    Cloud Account Connected
                   </span>
                 </div>
               </div>
@@ -211,7 +231,7 @@ export const BootScreen: React.FC = () => {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Firebase Cloud
+                Cloud Account
               </button>
             </div>
 
@@ -277,21 +297,89 @@ export const BootScreen: React.FC = () => {
                 </div>
               </div>
             ) : (
-              /* Mode 2: Firebase Cloud Google Sign-In */
+              /* Mode 2: Cloud Account Google Sign-In */
               <div className="space-y-4 pt-1">
                 <div className="text-center space-y-1 pb-1">
                   <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto mb-2">
                     <Cloud size={24} />
                   </div>
                   <h3 className="text-sm sm:text-base font-semibold text-slate-100">
-                    Firebase Cloud Workspace
+                    Cloud Account Workspace
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Sync your virtual files, desktop layout, and notes seamlessly with Google Cloud Firestore.
+                    Sync your virtual files, desktop layout, and notes seamlessly across devices.
                   </p>
                 </div>
 
-                {authError && (
+                {isUnauthorizedDomain ? (
+                  <div className="p-4 rounded-2xl bg-amber-950/70 border border-amber-700/80 text-amber-200 text-xs space-y-3">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle size={18} className="shrink-0 text-amber-400 mt-0.5" />
+                      <div>
+                        <div className="font-bold text-amber-100 text-xs sm:text-sm">
+                          Domain Authorization Required
+                        </div>
+                        <p className="text-[11.5px] text-amber-300/90 mt-1 leading-relaxed">
+                          Cloud authentication requires adding your deployment domain to your <strong>Authorized domains</strong> list.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-950/90 p-2.5 rounded-xl border border-amber-850/60 space-y-1.5">
+                      <div className="text-[11px] text-slate-400">Domain to authorize:</div>
+                      <div className="flex items-center justify-between gap-2">
+                        <code className="text-xs font-mono text-emerald-300 font-semibold truncate bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/40">
+                          {currentDomain}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={handleCopyDomain}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 text-[11px] font-medium flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                        >
+                          {copiedDomain ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                          <span>{copiedDomain ? 'Copied!' : 'Copy Domain'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 text-[11px] text-slate-300">
+                      <div className="font-semibold text-amber-200">30-Second Domain Setup:</div>
+                      <ol className="list-decimal list-inside space-y-1 text-slate-300/90 leading-normal">
+                        <li>
+                          Open <a
+                            href="https://console.firebase.google.com/project/webos-ff50c/authentication/settings"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 underline font-medium inline-flex items-center gap-0.5"
+                          >
+                            <span>Cloud Auth Settings</span>
+                            <ExternalLink size={10} />
+                          </a>
+                        </li>
+                        <li>Scroll down to <strong>Authorized domains</strong> &rarr; click <strong>Add domain</strong></li>
+                        <li>Paste <code className="text-emerald-300 bg-slate-900 px-1 rounded">{currentDomain}</code> and click <strong>Save</strong>.</li>
+                      </ol>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <a
+                        href="https://console.firebase.google.com/project/webos-ff50c/authentication/settings"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-center text-xs transition-colors shadow-sm"
+                      >
+                        Open Cloud Settings &rarr;
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleStartGuest}
+                        className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition-colors cursor-pointer"
+                      >
+                        Use Local Guest
+                      </button>
+                    </div>
+                  </div>
+                ) : authError ? (
                   <div className="p-3.5 rounded-2xl bg-rose-950/70 border border-rose-800 text-xs text-rose-200 space-y-1">
                     <div className="flex items-start gap-2">
                       <AlertCircle size={16} className="shrink-0 mt-0.5 text-rose-400" />
@@ -299,7 +387,7 @@ export const BootScreen: React.FC = () => {
                     </div>
                     <p className="text-[12px] text-rose-300/90 pl-6">{authError}</p>
                   </div>
-                )}
+                ) : null}
 
                 <div className="pt-2">
                   <button
@@ -333,7 +421,7 @@ export const BootScreen: React.FC = () => {
 
                 <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 pt-1">
                   <CheckCircle2 size={13} className="text-emerald-400" />
-                  <span>Configured with Firebase Project: webos-ff50c</span>
+                  <span>Cloud Storage & Identity Protected</span>
                 </div>
               </div>
             )}
@@ -343,7 +431,7 @@ export const BootScreen: React.FC = () => {
 
       {/* Footer Info */}
       <div className="text-center text-xs text-slate-500 pb-2">
-        <p>WebOS &bull; Zero external trackers &bull; Client-side sandboxed &bull; Firebase Firestore Cloud</p>
+        <p>WebOS &bull; Zero external trackers &bull; Client-side sandboxed &bull; Cloud Storage</p>
       </div>
     </div>
   );
