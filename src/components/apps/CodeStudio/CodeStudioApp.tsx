@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { useOS } from '../../../context/OSContext';
+import { loadFromStorage, saveToStorage, StorageKeys } from '../../../services/storage';
 
 export interface ProjectFile {
   name: string;
@@ -452,61 +453,33 @@ export interface CodeStudioAppProps {
 export const CodeStudioApp: React.FC<CodeStudioAppProps> = ({ payload }) => {
   const { createFile, updateFileContent, fs, addNotification } = useOS();
 
-  // Storage key for autosaving drafts
-  const DRAFT_KEY = 'webos_codestudio_active_project_v1';
+  // Active project & files with user-scoped draft recovery (defaults to blank project)
+  const savedDraft = useMemo(() => {
+    return loadFromStorage<{
+      project?: { id: string; name: string };
+      files?: ProjectFile[];
+      activeFilePath?: string;
+      openTabs?: string[];
+    } | null>(StorageKeys.CODE_STUDIO, null);
+  }, []);
 
-  // Active project & files with draft recovery (defaults to blank project)
   const [currentProject, setCurrentProject] = useState<{ id: string; name: string }>(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.project) return parsed.project;
-      }
-    } catch {
-      // transient
-    }
-    return { id: 'empty-project', name: 'Untitled Project' };
+    return savedDraft?.project || { id: 'empty-project', name: 'Untitled Project' };
   });
 
   const [files, setFiles] = useState<ProjectFile[]>(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && Array.isArray(parsed.files)) return parsed.files;
-      }
-    } catch {
-      // transient
-    }
-    return [];
+    return Array.isArray(savedDraft?.files) ? savedDraft.files : [];
   });
 
   const [activeFilePath, setActiveFilePath] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.activeFilePath) return parsed.activeFilePath;
-        if (parsed && Array.isArray(parsed.files) && parsed.files.length > 0) return parsed.files[0].path;
-      }
-    } catch {
-      // transient
-    }
+    if (savedDraft?.activeFilePath) return savedDraft.activeFilePath;
+    if (Array.isArray(savedDraft?.files) && savedDraft.files.length > 0) return savedDraft.files[0].path;
     return '';
   });
 
   const [openTabs, setOpenTabs] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && Array.isArray(parsed.openTabs)) return parsed.openTabs;
-        if (parsed && Array.isArray(parsed.files)) return parsed.files.map((f: ProjectFile) => f.path);
-      }
-    } catch {
-      // transient
-    }
+    if (Array.isArray(savedDraft?.openTabs)) return savedDraft.openTabs;
+    if (Array.isArray(savedDraft?.files)) return savedDraft.files.map((f: ProjectFile) => f.path);
     return [];
   });
 
@@ -563,21 +536,14 @@ export const CodeStudioApp: React.FC<CodeStudioAppProps> = ({ payload }) => {
     }
   }, [payload?.fileId, fs.nodes]);
 
-  // Autosave draft to localStorage
+  // Autosave draft to user-isolated storage
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        DRAFT_KEY,
-        JSON.stringify({
-          project: currentProject,
-          files,
-          activeFilePath,
-          openTabs,
-        })
-      );
-    } catch {
-      // storage limit or private mode
-    }
+    saveToStorage(StorageKeys.CODE_STUDIO, {
+      project: currentProject,
+      files,
+      activeFilePath,
+      openTabs,
+    });
   }, [currentProject, files, activeFilePath, openTabs]);
 
   const activeFile = useMemo(() => {

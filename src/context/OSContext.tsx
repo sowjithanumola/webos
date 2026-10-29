@@ -106,6 +106,13 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   // Filesystem
   const [fs, setFs] = useState<FileSystemState>(() => fsService.getState());
 
+  // Synchronize filesystem reactively whenever active user switches or cloud sync occurs
+  useEffect(() => {
+    return fsService.subscribe((freshState) => {
+      setFs(freshState);
+    });
+  }, []);
+
   // Windows
   const [windows, setWindows] = useState<WindowState[]>([]);
   const [highestZIndex, setHighestZIndex] = useState<number>(10);

@@ -34,6 +34,7 @@ import {
   FileCheck,
 } from 'lucide-react';
 import { useOS } from '../../../context/OSContext';
+import { loadFromStorage, saveToStorage, StorageKeys } from '../../../services/storage';
 
 interface DocTemplate {
   id: string;
@@ -157,41 +158,24 @@ export interface DocsStudioAppProps {
 export const DocsStudioApp: React.FC<DocsStudioAppProps> = ({ payload }) => {
   const { fs, createFile, updateFileContent, addNotification } = useOS();
 
-  // Storage key for autosaving drafts
-  const DRAFT_KEY = 'webos_docs_studio_draft_v1';
+  // Multi-document tabs state with user-scoped draft recovery (defaults to single blank document)
+  const defaultInitialDoc: OpenDoc[] = [
+    {
+      id: 'doc_1',
+      title: 'Untitled.md',
+      content: '',
+      isSaved: true,
+    },
+  ];
 
-  // Multi-document tabs state (defaults to single blank document)
   const [docs, setDocs] = useState<OpenDoc[]>(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {
-      // transient
-    }
-    return [
-      {
-        id: 'doc_1',
-        title: 'Untitled.md',
-        content: '',
-        isSaved: true,
-      },
-    ];
+    const loaded = loadFromStorage<OpenDoc[]>(StorageKeys.DOCS_STUDIO, defaultInitialDoc);
+    return Array.isArray(loaded) && loaded.length > 0 ? loaded : defaultInitialDoc;
   });
 
   const [activeDocId, setActiveDocId] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed[0].id;
-      }
-    } catch {
-      // transient
-    }
-    return 'doc_1';
+    const loaded = loadFromStorage<OpenDoc[]>(StorageKeys.DOCS_STUDIO, defaultInitialDoc);
+    return Array.isArray(loaded) && loaded.length > 0 ? loaded[0].id : 'doc_1';
   });
   const [viewLayout, setViewLayout] = useState<'split' | 'editor' | 'preview'>('split');
   const [showOutline, setShowOutline] = useState<boolean>(true);
@@ -232,13 +216,9 @@ export const DocsStudioApp: React.FC<DocsStudioAppProps> = ({ payload }) => {
     }
   }, [payload?.fileId, fs.nodes]);
 
-  // Persist docs draft to localStorage
+  // Persist docs draft to user-isolated storage
   useEffect(() => {
-    try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(docs));
-    } catch {
-      // transient
-    }
+    saveToStorage(StorageKeys.DOCS_STUDIO, docs);
   }, [docs]);
 
   // Derive metrics (words, chars, reading time)

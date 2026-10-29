@@ -248,18 +248,70 @@ http://www.apache.org/licenses/LICENSE-2.0`,
 
 export class FileSystemService {
   private state: FileSystemState;
+  private currentUserId: string | null = null;
+  private listeners: ((state: FileSystemState) => void)[] = [];
 
   constructor() {
     this.state = loadFromStorage<FileSystemState>(StorageKeys.FILESYSTEM, INITIAL_FS);
     // Sanity check to ensure required folders exist
     if (!this.state.nodes[ROOT_ID] || !this.state.nodes[TRASH_ID]) {
-      this.state = INITIAL_FS;
+      this.state = JSON.parse(JSON.stringify(INITIAL_FS));
       this.persist();
     }
   }
 
+  public subscribe(listener: (state: FileSystemState) => void): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
+  }
+
+  private notifyListeners(): void {
+    const freshState = this.getState();
+    this.listeners.forEach((l) => l(freshState));
+  }
+
   private persist(): void {
-    saveToStorage(StorageKeys.FILESYSTEM, this.state);
+    saveToStorage(StorageKeys.FILESYSTEM, this.state, this.currentUserId);
+    this.notifyListeners();
+  }
+
+  public switchUser(newUserId: string | null): void {
+    this.currentUserId = newUserId;
+    const loaded = loadFromStorage<FileSystemState>(
+      StorageKeys.FILESYSTEM,
+      INITIAL_FS,
+      newUserId
+    );
+    if (!loaded.nodes[ROOT_ID] || !loaded.nodes[TRASH_ID]) {
+      this.state = JSON.parse(JSON.stringify(INITIAL_FS));
+    } else {
+      this.state = loaded;
+    }
+    this.notifyListeners();
+  }
+
+  public resetUserFiles(): void {
+    this.state = JSON.parse(JSON.stringify(INITIAL_FS));
+    this.persist();
+  }
+
+  public syncCloudFiles(cloudFiles: Record<string, VirtualFile>): void {
+    let changed = false;
+    for (const [id, file] of Object.entries(cloudFiles)) {
+      if (!this.state.nodes[id]) {
+        this.state.nodes[id] = file;
+        const parent = this.state.nodes[file.parentId] as VirtualFolder | undefined;
+        if (parent && parent.childrenIds && !parent.childrenIds.includes(id)) {
+          parent.childrenIds.push(id);
+        }
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.persist();
+    }
   }
 
   public getState(): FileSystemState {

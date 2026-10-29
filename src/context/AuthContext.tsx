@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, firebaseStorage, CloudSyncStatus } from '../services/firebase';
 import { fsService } from '../services/fsService';
+import { setStorageUserId } from '../services/storage';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -56,7 +57,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsGuest(false);
         localStorage.removeItem('webos_auth_mode');
 
-        // Upsert user profile & sync cloud files
+        // 1. Isolate storage key namespace to this specific user ID
+        setStorageUserId(currentUser.uid);
+
+        // 2. Switch filesystem tree to this specific user ID
+        fsService.switchUser(currentUser.uid);
+
+        // 3. Upsert user profile & sync cloud files from Firestore
         try {
           await firebaseStorage.upsertUserProfile(currentUser);
           await syncUserFilesFromCloud(currentUser.uid);
@@ -68,6 +75,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const storedMode = localStorage.getItem('webos_auth_mode');
         if (storedMode === 'guest') {
           setIsGuest(true);
+          setStorageUserId('guest');
+          fsService.switchUser('guest');
+        } else {
+          setIsGuest(false);
+          setStorageUserId(null);
+          fsService.switchUser(null);
         }
       }
       setLoading(false);
@@ -80,21 +93,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // Sync files from Firestore down to local virtual filesystem
+  // Sync files from Firestore down to local virtual filesystem for the active user
   const syncUserFilesFromCloud = async (userId: string) => {
     try {
       const filesMap = await firebaseStorage.loadUserFiles(userId);
       if (filesMap && Object.keys(filesMap).length > 0) {
-        for (const file of Object.values(filesMap)) {
-          try {
-            const existing = fsService.getNodeByPath(file.path);
-            if (!existing) {
-              fsService.createFile(file.path, file.content || '', file.type);
-            }
-          } catch {
-            // ignore individual conflict
-          }
-        }
+        fsService.syncCloudFiles(filesMap);
       }
     } catch (err) {
       console.warn('Failed to sync files from cloud storage:', err);
@@ -162,13 +166,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Error signing out:', err);
     }
     setUser(null);
-    setIsGuest(true);
-    localStorage.setItem('webos_auth_mode', 'guest');
+    setIsGuest(false);
+    localStorage.removeItem('webos_auth_mode');
+    setStorageUserId(null);
+    fsService.switchUser(null);
   };
 
   const continueAsGuest = () => {
     setIsGuest(true);
     localStorage.setItem('webos_auth_mode', 'guest');
+    setStorageUserId('guest');
+    fsService.switchUser('guest');
   };
 
   const migrateGuestFilesToCloud = useCallback(async (): Promise<number> => {

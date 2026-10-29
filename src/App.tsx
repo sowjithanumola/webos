@@ -1,5 +1,5 @@
 import React from 'react';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { OSProvider, useOS } from './context/OSContext';
 import { BootScreen } from './components/boot/BootScreen';
 import { LockScreen } from './components/boot/LockScreen';
@@ -40,12 +40,24 @@ const OSContent: React.FC = () => {
   return <Desktop />;
 };
 
+const OSRoot: React.FC = () => {
+  const { user, isGuest } = useAuth();
+  // Keying OSProvider by authenticated user ID guarantees that when a user logs out
+  // or a different user logs in, the entire desktop OS state (windows, active apps,
+  // file explorer buffers) is completely torn down and rebuilt fresh for the active session.
+  const sessionKey = user ? `user_${user.uid}` : (isGuest ? 'guest' : 'boot');
+
+  return (
+    <OSProvider key={sessionKey}>
+      <OSContent />
+    </OSProvider>
+  );
+};
+
 export default function App() {
   return (
     <AuthProvider>
-      <OSProvider>
-        <OSContent />
-      </OSProvider>
+      <OSRoot />
     </AuthProvider>
   );
 }

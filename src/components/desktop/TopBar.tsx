@@ -10,11 +10,13 @@ import {
   HelpCircle,
   Command,
   Cloud,
+  LogOut,
 } from 'lucide-react';
 import { useOS } from '../../context/OSContext';
 import { useAuth } from '../../context/AuthContext';
 
 export const TopBar: React.FC = () => {
+  const { user, signOut } = useAuth();
   const {
     settings,
     windows,
@@ -28,7 +30,6 @@ export const TopBar: React.FC = () => {
     toggleNotificationCenter,
     notifications,
   } = useOS();
-  const { user } = useAuth();
 
   const [timeStr, setTimeStr] = useState<string>('');
   const [dateStr, setDateStr] = useState<string>('');
@@ -147,6 +148,17 @@ export const TopBar: React.FC = () => {
                   >
                     <Lock size={14} className="text-amber-400" />
                     <span>Lock Screen</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsSystemMenuOpen(false);
+                      signOut();
+                    }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-600/80 hover:text-white transition-colors text-left text-slate-200"
+                  >
+                    <LogOut size={14} className="text-rose-400" />
+                    <span>{user ? `Sign Out (${user.displayName || user.email?.split('@')[0]})` : 'Exit Guest Session'}</span>
                   </button>
 
                   <button
